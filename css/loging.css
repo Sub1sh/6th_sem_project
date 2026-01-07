@@ -1,0 +1,271 @@
+/* ======================== General Styles ======================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@100;300;400;500;600&display=swap');
+
+:root {
+    --yellow: #f9d806;
+    --light-yellow: #ffee80;
+    --black: #130f40;
+    --dark-black: #000000;
+    --light-color: #666;
+    --blue: #8cacea;
+    --navy: #000080;
+    --white: #ffffff;
+    --box-shadow: 0 .5rem 1rem rgba(0,0,0,.1);
+    --border: .1rem solid rgba(0,0,0,.1);
+}
+
+* {
+    font-family: 'Poppins', sans-serif;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    outline: none;
+    border: none;
+    text-decoration: none;
+    text-transform: capitalize;
+    transition: 0.2s linear;
+}
+
+body {
+    background-image: url("../image/background 2.jpg");
+    overflow-x: hidden;
+    height: 100%;
+    width: 100%;
+}
+
+html {
+    font-size: 62.5%;
+    scroll-padding-top: 7rem;
+    scroll-behavior: smooth;
+}
+
+section {
+    padding: 2rem 9%;
+}
+
+/* ======================== Buttons ======================== */
+
+.btn {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.8rem 3rem;
+    background: var(--light-yellow);
+    color: var(--black);
+    cursor: pointer;
+    font-size: 1.7rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    text-align: center;
+}
+
+.btn:hover {
+    background: var(--blue);
+}
+
+/* ======================== Header ======================== */
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    padding: 3rem 9%;
+    z-index: 1000;
+    background: #fff;
+}
+
+.header.active {
+    padding: 2rem 9%;
+    box-shadow: var(--box-shadow);
+}
+
+.header .logo img {
+    height: 60px;
+}
+
+.navbar {
+    background-color: white !important;
+}
+
+.navbar nav ul {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    display: flex;
+    gap: 1rem;
+}
+
+.navbar nav ul li {
+    position: relative;
+}
+
+.navbar nav ul li a {
+    display: block;
+    padding: 0 15px;
+    line-height: 60px;
+    color: var(--black);
+    font-size: 1.5rem;
+}
+
+.navbar nav ul li a:hover {
+    color: var(--yellow);
+}
+
+/* Dropdown menu */
+nav ul ul {
+    position: absolute;
+    top: 60px;
+    left: 0;
+    display: none;
+    background: #fff;
+    padding: 0;
+    border-radius: 5px;
+}
+
+nav ul li:hover > ul {
+    display: block;
+}
+
+nav ul ul li {
+    width: 200px;
+}
+
+#menu-btn {
+    font-size: 2.5rem;
+    color: var(--light-color);
+    display: none;
+    cursor: pointer;
+}
+
+/* Auth Buttons */
+.auth-buttons {
+    display: flex;
+    gap: 1rem;
+}
+
+#login-btn .btn,
+#signup-btn .btn {
+    margin: 0;
+}
+
+/* ======================== Login Modal ======================== */
+
+.login-form-container {
+    position: fixed;
+    top: -100%;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    transition: top 0.4s ease;
+}
+
+.login-form-container.active {
+    top: 0;
+}
+
+.login-form-container .form-box {
+    width: 400px;
+    padding: 20px;
+    background: #fff;
+    border-radius: 10px;
+    position: relative;
+    text-align: center;
+}
+
+#close-login-form {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 2.5rem;
+    cursor: pointer;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.input-field {
+    width: 100%;
+    padding: 10px;
+    border-bottom: 1px solid #999;
+    background: transparent;
+    font-size: 1.6rem;
+}
+
+.submit-btn {
+    padding: 10px 30px;
+    cursor: pointer;
+    background: linear-gradient(to right, #ff105f, #ffad06);
+    border-radius: 30px;
+    font-size: 1.6rem;
+    color: #fff;
+}
+
+.Social-Icons {
+    margin: 20px 0;
+}
+
+.Social-Icons img {
+    width: 30px;
+    margin: 0 10px;
+    cursor: pointer;
+}
+
+/* Toggle buttons inside modal */
+.button-box {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.toggle-btn {
+    width: 48%;
+    padding: 10px;
+    cursor: pointer;
+    background-color: #ffad06;
+    border-radius: 20px;
+    font-weight: bold;
+    color: #fff;
+}
+
+.toggle-btn:hover {
+    background-color: #ff105f;
+}
+
+/* ======================== Responsive ======================== */
+
+@media (max-width: 991px) {
+    html { font-size: 55%; }
+    .header { padding: 2rem; }
+    section { padding: 2rem; }
+}
+
+@media (max-width: 768px) {
+    #menu-btn { display: block; }
+    .header .navbar {
+        position: absolute;
+        top: 100%; left: 0; right: 0;
+        background: #fff;
+        flex-direction: column;
+        overflow: hidden;
+        max-height: 0;
+        transition: max-height 0.3s ease;
+    }
+    .header .navbar.active { max-height: 500px; }
+
+    #login-btn .btn { display: none; }
+}
+
+@media (max-width: 450px) {
+    html { font-size: 50%; }
+}
