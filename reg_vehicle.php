@@ -21,7 +21,7 @@
 
     <div id="menu-btn" class="fas fa-bars"></div>
 
-    <a href="#" class="logo"> <span>WaVe👋</span>– MoRE</a>
+    <a href="#" class="logo"> <span>Travel_x</span></a>
 
     <div class="navbar">
         <nav>
