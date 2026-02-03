@@ -1,148 +1,81 @@
-<!--- This is the Sign Up Page --->
-
-<!--- IT 21334306      W.H.Dilmith Wathsala  --->
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
-    <link rel="stylesheet" href="https://unpkg.com/swiper@7/swiper-bundle.min.css" />
-
-    <!-- font awesome cdn link  -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-
-    <!-- custom css file link  -->
-    <link rel="stylesheet" href="css/signin.css">
-    <link rel="stylesheet" href="css/homepage.css">
-
-
-</head>
-<body>
-
-<?php include("nav.php")?>
-
 <?php
-
 session_start();
 
-  include("connection.php");
-  include("function.php");
+// Database connection (replace with your actual connection file or include connection.php)
+$con = mysqli_connect("localhost", "root", "", "registration");
 
+if (!$con) {
+    die("Connection Failed: " . mysqli_connect_error());
+}
 
-  if($_SERVER['REQUEST_METHOD'] == "POST")
-  {
-    //something was posted
-    $user_name = $_POST['user_name'];
-    $email = $_POST['email'];
-    $phone = $_POST['phone'];
-    $password = $_POST['password'];
-    $con_pass=$_POST['cpassword'];
-  //  $check=$_POST['check'];
-
-
-   // echo $user_name;
-
-
-    if(!empty($user_name) && !empty($password) && !is_numeric($user_name))
-    {
-        
-
-       if($password==$con_pass){
-
-        
-        //   $password=md5($password);//
-
-            //save to database
-            $user_id = random_num(20);
-            $query = "insert into users(user_id,user_name,email,phone,password) values ('$user_id','$user_name','$email','$phone','$password')";
-
-            mysqli_query($conn,$query);
-
-            echo ("<script LANGUAGE='JavaScript'>
-    window.alert('Succesfully your Sign Up!!!');
-    window.location.href='loging.php';
-    </script>");
-
-        }
-        else{
-
-             echo "Please enter confirm password as previous one!!";
-
-          }
+// Function to generate random number
+function random_num($length) {
+    $text = "";
+    if ($length < 5) {
+        $length = 5;
     }
-    else{
+    $len = rand(4, $length);
+    for ($i = 0; $i < $len; $i++) {
+        $text .= rand(0, 9);
+    }
+    return $text;
+}
+
+if ($_SERVER['REQUEST_METHOD'] == "POST") {
+    $user_name = $_POST['user_name'] ?? '';
+    $email = $_POST['email'] ?? '';
+    $phone = $_POST['phone'] ?? '';
+    $password = $_POST['password'] ?? '';
+    $con_pass = $_POST['cpassword'] ?? '';
+
+    // Validation
+    if (empty($user_name) || empty($email) || empty($phone) || empty($password)) {
+        echo "<script>alert('All fields are required');</script>";
+        exit;
+    }
+
+    if ($password !== $con_pass) {
+        echo "<script>alert('Passwords do not match');</script>";
+        exit;
+    }
+
+    // Check if email already exists
+    $check_email = mysqli_prepare($con, "SELECT email FROM users WHERE email = ?");
+    $check_email->bind_param("s", $email);
+    $check_email->execute();
+    $check_email->store_result();
     
-         echo "Please enter some valid information!";
+    if ($check_email->num_rows > 0) {
+        echo "<script>alert('Email already exists');</script>";
+        $check_email->close();
+        exit;
+    }
+    $check_email->close();
 
-      }
-  }
-?>
+    // Hash password
+    $hashedPass = password_hash($password, PASSWORD_DEFAULT);
+    $user_id = random_num(20);
 
-
-<div class="body">
+    // Prepare and execute insert statement
+    $stmt = $con->prepare("INSERT INTO users (user_id, user_name, email, phone, password) VALUES (?, ?, ?, ?, ?)");
+    
+    if ($stmt) {
+        $stmt->bind_param("sssss", $user_id, $user_name, $email, $phone, $hashedPass);
         
-            <div class="form-box"> 
-            <h1><b><i><center>Create an Account</center></i></b></h1>
+        if ($stmt->execute()) {
+            echo "<script>
+                    alert('Signup successful!');
+                    window.location.href='loging.php';
+                  </script>";
+        } else {
+            echo "<script>alert('Signup failed: " . $stmt->error . "');</script>";
+        }
+        $stmt->close();
+    } else {
+        echo "<script>alert('Database error: " . $con->error . "');</script>";
+    }
+}
 
-
-                           <!------------------------------------------sign up box------------------------------------------------------>
-
-                <div class="button-box"> 
-                    <div id="btn"></div>
-                                        
-                        <br>
-                    </div>
-                    <div class="Social-Icons">
-                        <img src="image/fb.png">
-                        <img src="image/gp.png">
-                        <img src="image/tw.png">
-                    </div>
-                    <br><br><br>
-
-                    <form id="Register" class="input-group"  method="post">
-
-                        <input type="text" name="user_name"class="input-field" placeholder="Enter a user name" required>
-
-                        <input type="text" name="email"class="input-field" placeholder="Enter Your Email" required pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,4}$" title="enter email as correct order">
-
-                        <input type="text" name="phone"class="input-field" placeholder="Enter your phone number" required>
-
-                        <input type="password" name="password"class="input-field" placeholder="Enter a Password" required  pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}" title="Must contain at least one number and one uppercase and lowercase letter, and at least 8 or more characters">
-
-                        <input type="password" name="cpassword"class="input-field" placeholder="Confirm Password" required  pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}" title="not same as previous password!!!">
-
-                        <input type="checkbox" class="check-box"><span>I agree to the terms & conditions</span>
-
-                        <button type="submit" name="SignUp" class="submit-btn">Register</button>
-                        
-                    </form>
-                    
-                        
-                    
-               </div>
-            </div>      
-     </div>
-   
-
-    </body>
-
-<br><br><br><br><br>
-
-
-<!----------------Footer starts------------------------------------------------------------------------------->
-
-<?php include("footer.php");?>
-
-
-
-
-
-<script src="https://unpkg.com/swiper@7/swiper-bundle.min.js"></script>
-
-<script src="js/signin.js"></script>
-
-</body>
-</html>
+// Close connection at the end
+$con->close();
+?>
