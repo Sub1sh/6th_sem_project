@@ -1,3 +1,7 @@
+<?php
+session_start();
+include_once(__DIR__ . "/connection.php");
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -208,7 +212,7 @@
         <div class="swiper-pagination"></div>
     </div>
 </section>
-
+<?php include("recommendation.php"); ?>
 <!-- Services Section -->
 <section class="services" id="services">
     <h1 class="heading"> our services <span></span> </h1>
