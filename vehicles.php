@@ -1,6 +1,29 @@
 <?php
 session_start();
 include("connection.php");
+
+// Get current page number
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+if ($page < 1) $page = 1;
+
+// Number of vehicles per page
+$vehicles_per_page = 8;
+
+// Calculate offset
+$offset = ($page - 1) * $vehicles_per_page;
+
+// Get total number of vehicles
+$total_sql = "SELECT COUNT(*) as total FROM vehicles WHERE status = 'available'";
+$total_result = mysqli_query($conn, $total_sql);
+$total_row = mysqli_fetch_assoc($total_result);
+$total_vehicles = $total_row['total'];
+
+// Calculate total pages
+$total_pages = ceil($total_vehicles / $vehicles_per_page);
+
+// Fetch vehicles for current page
+$sql = "SELECT * FROM vehicles WHERE status = 'available' ORDER BY id LIMIT $offset, $vehicles_per_page";
+$result = mysqli_query($conn, $sql);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -521,12 +544,13 @@ include("connection.php");
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 15px;
+            gap: 10px;
             margin-top: 40px;
+            flex-wrap: wrap;
         }
 
         .page-link {
-            width: 40px;
+            min-width: 40px;
             height: 40px;
             display: flex;
             align-items: center;
@@ -538,12 +562,26 @@ include("connection.php");
             font-weight: 600;
             box-shadow: var(--box-shadow);
             transition: all 0.3s ease;
+            padding: 0 12px;
         }
 
         .page-link:hover,
         .page-link.active {
             background: var(--primary);
             color: white;
+        }
+
+        .page-dots {
+            color: var(--light-color);
+            font-size: 1.2rem;
+            padding: 0 5px;
+        }
+
+        .page-info {
+            text-align: center;
+            margin-top: 20px;
+            color: var(--light-color);
+            font-size: 0.9rem;
         }
 
         /* Responsive Design */
@@ -581,6 +619,16 @@ include("connection.php");
 
             .categories-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .pagination {
+                gap: 5px;
+            }
+
+            .page-link {
+                min-width: 35px;
+                height: 35px;
+                font-size: 0.9rem;
             }
         }
 
@@ -716,327 +764,123 @@ include("connection.php");
         <section class="vehicles-container">
             <div class="section-header">
                 <h2>Available Vehicles</h2>
-                <p>Select from our premium collection of vehicles</p>
+                <p>Showing <?php echo min($vehicles_per_page, $total_vehicles - $offset); ?> of <?php echo $total_vehicles; ?> vehicles (Page <?php echo $page; ?> of <?php echo $total_pages; ?>)</p>
             </div>
             
             <div class="vehicles-grid" id="vehiclesGrid">
-                <!-- Cars -->
-                <div class="vehicle-card" data-category="car" data-price="2500">
-                    <div class="vehicle-badge">Available</div>
+                <?php 
+                if ($result && mysqli_num_rows($result) > 0) {
+                    while ($vehicle = mysqli_fetch_assoc($result)) {
+                        $image = $vehicle['image_url'] ?? 'image/vehicle-1.png';
+                        if (!file_exists($image)) {
+                            $image = 'image/vehicle-1.png';
+                        }
+                        
+                        // Determine badge based on vehicle data
+                        $badge = '<span class="vehicle-badge">Available</span>';
+                        if ($vehicle['year'] >= 2023) {
+                            $badge = '<span class="vehicle-badge new">New</span>';
+                        } elseif ($vehicle['daily_rate'] > 20000) {
+                            $badge = '<span class="vehicle-badge popular">Premium</span>';
+                        }
+                        
+                        // Get category based on vehicle type
+                        $category = 'car';
+                        if (strpos($vehicle['type'], 'Truck') !== false) $category = 'truck';
+                        elseif (strpos($vehicle['type'], 'Lorry') !== false) $category = 'lorry';
+                        elseif (strpos($vehicle['type'], 'Luxury') !== false) $category = 'luxury';
+                ?>
+                <div class="vehicle-card" data-category="<?php echo $category; ?>" data-price="<?php echo $vehicle['daily_rate']; ?>">
+                    <?php echo $badge; ?>
                     <div class="vehicle-image">
-                        <img src="image/vehicle-3.png" alt="PERODUA AXIA">
+                        <img src="<?php echo $image; ?>" alt="<?php echo $vehicle['brand'] . ' ' . $vehicle['model']; ?>">
                     </div>
                     <div class="vehicle-content">
-                        <h3 class="vehicle-title">PERODUA (DAIHATSU) AXIA</h3>
-                        <div class="vehicle-price">Rs 2,500 <span>/day</span></div>
+                        <h3 class="vehicle-title"><?php echo $vehicle['brand'] . ' ' . $vehicle['model']; ?></h3>
+                        <div class="vehicle-price">Rs <?php echo number_format($vehicle['daily_rate'], 0); ?> <span>/day</span></div>
                         <div class="vehicle-details">
                             <div class="detail-item">
                                 <i class="fas fa-calendar"></i>
-                                <span>2021</span>
+                                <span><?php echo $vehicle['year']; ?></span>
                             </div>
                             <div class="detail-item">
                                 <i class="fas fa-cog"></i>
-                                <span>Automatic</span>
+                                <span><?php echo $vehicle['transmission'] ?? 'Auto'; ?></span>
                             </div>
                             <div class="detail-item">
                                 <i class="fas fa-gas-pump"></i>
-                                <span>Petrol</span>
+                                <span><?php echo $vehicle['fuel_type'] ?? 'Petrol'; ?></span>
                             </div>
                             <div class="detail-item">
                                 <i class="fas fa-tachometer-alt"></i>
-                                <span>183 mph</span>
+                                <span><?php echo $vehicle['top_speed'] ?? '120'; ?> mph</span>
                             </div>
                         </div>
                         <div class="vehicle-features">
-                            <span class="feature-tag">AC</span>
-                            <span class="feature-tag">Power Steering</span>
-                            <span class="feature-tag">4 Seater</span>
+                            <span class="feature-tag"><?php echo $vehicle['type']; ?></span>
+                            <span class="feature-tag"><?php echo $vehicle['color'] ?? 'N/A'; ?></span>
                         </div>
                         <div class="vehicle-actions">
-                            <a href="#" class="btn-details">View Details</a>
+                            <a href="vehicle-details.php?id=<?php echo $vehicle['id']; ?>" class="btn-details">View Details</a>
                             <button class="btn-rent">Rent Now</button>
                         </div>
                     </div>
                 </div>
-                
-                <!-- Luxury Car -->
-                <div class="vehicle-card" data-category="luxury" data-price="15000">
-                    <div class="vehicle-badge popular">Popular</div>
-                    <div class="vehicle-image">
-                        <img src="image/vehicle-1.png" alt="Ferrari">
-                    </div>
-                    <div class="vehicle-content">
-                        <h3 class="vehicle-title">Rosso Corsa Red Ferrari</h3>
-                        <div class="vehicle-price">Rs 15,000 <span>/day</span></div>
-                        <div class="vehicle-details">
-                            <div class="detail-item">
-                                <i class="fas fa-calendar"></i>
-                                <span>2021</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-cog"></i>
-                                <span>Automatic</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-gas-pump"></i>
-                                <span>Petrol</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-tachometer-alt"></i>
-                                <span>211 mph</span>
-                            </div>
-                        </div>
-                        <div class="vehicle-features">
-                            <span class="feature-tag">Luxury</span>
-                            <span class="feature-tag">Leather Seats</span>
-                            <span class="feature-tag">Sports Mode</span>
-                        </div>
-                        <div class="vehicle-actions">
-                            <a href="#" class="btn-details">View Details</a>
-                            <button class="btn-rent">Rent Now</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Truck -->
-                <div class="vehicle-card" data-category="truck" data-price="8000">
-                    <div class="vehicle-badge new">New</div>
-                    <div class="vehicle-image">
-                        <img src="image/Yellow-Truck.png" alt="GENLVON Yellow Truck">
-                    </div>
-                    <div class="vehicle-content">
-                        <h3 class="vehicle-title">GENLVON Yellow Truck</h3>
-                        <div class="vehicle-price">Rs 8,000 <span>/day</span></div>
-                        <div class="vehicle-details">
-                            <div class="detail-item">
-                                <i class="fas fa-calendar"></i>
-                                <span>2021</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-cog"></i>
-                                <span>Manual</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-gas-pump"></i>
-                                <span>Diesel</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-tachometer-alt"></i>
-                                <span>55 mph</span>
-                            </div>
-                        </div>
-                        <div class="vehicle-features">
-                            <span class="feature-tag">Heavy Duty</span>
-                            <span class="feature-tag">Cargo</span>
-                            <span class="feature-tag">Power Steering</span>
-                        </div>
-                        <div class="vehicle-actions">
-                            <a href="#" class="btn-details">View Details</a>
-                            <button class="btn-rent">Rent Now</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Lorry -->
-                <div class="vehicle-card" data-category="lorry" data-price="7500">
-                    <div class="vehicle-image">
-                        <img src="image/indian-trucks.png" alt="Ashok Leyland Lorry">
-                    </div>
-                    <div class="vehicle-content">
-                        <h3 class="vehicle-title">Ashok Leyland Lorry</h3>
-                        <div class="vehicle-price">Rs 7,500 <span>/day</span></div>
-                        <div class="vehicle-details">
-                            <div class="detail-item">
-                                <i class="fas fa-calendar"></i>
-                                <span>2020</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-cog"></i>
-                                <span>Manual</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-gas-pump"></i>
-                                <span>Diesel</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-tachometer-alt"></i>
-                                <span>53 mph</span>
-                            </div>
-                        </div>
-                        <div class="vehicle-features">
-                            <span class="feature-tag">Cargo</span>
-                            <span class="feature-tag">Commercial</span>
-                            <span class="feature-tag">Heavy Load</span>
-                        </div>
-                        <div class="vehicle-actions">
-                            <a href="#" class="btn-details">View Details</a>
-                            <button class="btn-rent">Rent Now</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Luxury Car 2 -->
-                <div class="vehicle-card" data-category="luxury" data-price="12000">
-                    <div class="vehicle-image">
-                        <img src="image/vehicle-2.png" alt="Grigio Silverstone Ferrari">
-                    </div>
-                    <div class="vehicle-content">
-                        <h3 class="vehicle-title">Grigio Silverstone Ferrari</h3>
-                        <div class="vehicle-price">Rs 12,000 <span>/day</span></div>
-                        <div class="vehicle-details">
-                            <div class="detail-item">
-                                <i class="fas fa-calendar"></i>
-                                <span>2022</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-cog"></i>
-                                <span>Automatic</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-gas-pump"></i>
-                                <span>Petrol</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-tachometer-alt"></i>
-                                <span>211 mph</span>
-                            </div>
-                        </div>
-                        <div class="vehicle-features">
-                            <span class="feature-tag">Luxury</span>
-                            <span class="feature-tag">Sports Car</span>
-                            <span class="feature-tag">Convertible</span>
-                        </div>
-                        <div class="vehicle-actions">
-                            <a href="#" class="btn-details">View Details</a>
-                            <button class="btn-rent">Rent Now</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Truck 2 -->
-                <div class="vehicle-card" data-category="truck" data-price="8500">
-                    <div class="vehicle-image">
-                        <img src="image/truck.png" alt="IVECO Red Cargo Truck">
-                    </div>
-                    <div class="vehicle-content">
-                        <h3 class="vehicle-title">IVECO Red Cargo Truck</h3>
-                        <div class="vehicle-price">Rs 8,500 <span>/day</span></div>
-                        <div class="vehicle-details">
-                            <div class="detail-item">
-                                <i class="fas fa-calendar"></i>
-                                <span>2017</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-cog"></i>
-                                <span>Manual</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-gas-pump"></i>
-                                <span>Diesel</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-tachometer-alt"></i>
-                                <span>51 mph</span>
-                            </div>
-                        </div>
-                        <div class="vehicle-features">
-                            <span class="feature-tag">Cargo</span>
-                            <span class="feature-tag">Heavy Load</span>
-                            <span class="feature-tag">Durable</span>
-                        </div>
-                        <div class="vehicle-actions">
-                            <a href="#" class="btn-details">View Details</a>
-                            <button class="btn-rent">Rent Now</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Lorry 2 -->
-                <div class="vehicle-card" data-category="lorry" data-price="7000">
-                    <div class="vehicle-image">
-                        <img src="image/lorry.png" alt="Eicher Motors Box Lorry">
-                    </div>
-                    <div class="vehicle-content">
-                        <h3 class="vehicle-title">Eicher Motors Box Lorry</h3>
-                        <div class="vehicle-price">Rs 7,000 <span>/day</span></div>
-                        <div class="vehicle-details">
-                            <div class="detail-item">
-                                <i class="fas fa-calendar"></i>
-                                <span>2018</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-cog"></i>
-                                <span>Manual</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-gas-pump"></i>
-                                <span>Diesel</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-tachometer-alt"></i>
-                                <span>65 mph</span>
-                            </div>
-                        </div>
-                        <div class="vehicle-features">
-                            <span class="feature-tag">Box Lorry</span>
-                            <span class="feature-tag">Cargo</span>
-                            <span class="feature-tag">Protected</span>
-                        </div>
-                        <div class="vehicle-actions">
-                            <a href="#" class="btn-details">View Details</a>
-                            <button class="btn-rent">Rent Now</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Premium Car -->
-                <div class="vehicle-card" data-category="premium" data-price="4500">
-                    <div class="vehicle-image">
-                        <img src="image/vehicle-4.png" alt="Nissan Skyline GT-R R33">
-                    </div>
-                    <div class="vehicle-content">
-                        <h3 class="vehicle-title">Nissan Skyline GT-R R33</h3>
-                        <div class="vehicle-price">Rs 4,500 <span>/day</span></div>
-                        <div class="vehicle-details">
-                            <div class="detail-item">
-                                <i class="fas fa-calendar"></i>
-                                <span>2022</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-cog"></i>
-                                <span>Automatic</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-gas-pump"></i>
-                                <span>Petrol</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-tachometer-alt"></i>
-                                <span>203 mph</span>
-                            </div>
-                        </div>
-                        <div class="vehicle-features">
-                            <span class="feature-tag">Premium</span>
-                            <span class="feature-tag">Sports</span>
-                            <span class="feature-tag">Fast</span>
-                        </div>
-                        <div class="vehicle-actions">
-                            <a href="#" class="btn-details">View Details</a>
-                            <button class="btn-rent">Rent Now</button>
-                        </div>
-                    </div>
-                </div>
+                <?php 
+                    }
+                } else {
+                    echo "<p style='text-align:center; grid-column:1/-1; padding:50px;'>No vehicles found.</p>";
+                }
+                ?>
             </div>
             
             <!-- Pagination -->
+            <?php if ($total_pages > 1): ?>
             <div class="pagination">
-                <a href="#" class="page-link active">1</a>
-                <a href="#" class="page-link">2</a>
-                <a href="#" class="page-link">3</a>
-                <a href="#" class="page-link">4</a>
-                <span>...</span>
-                <a href="#" class="page-link">Next</a>
+                <!-- Previous button -->
+                <?php if ($page > 1): ?>
+                    <a href="?page=<?php echo $page-1; ?>" class="page-link"><i class="fas fa-chevron-left"></i></a>
+                <?php else: ?>
+                    <span class="page-link" style="opacity:0.5; cursor:not-allowed;"><i class="fas fa-chevron-left"></i></span>
+                <?php endif; ?>
+                
+                <!-- Page numbers -->
+                <?php
+                $start_page = max(1, $page - 2);
+                $end_page = min($total_pages, $page + 2);
+                
+                if ($start_page > 1) {
+                    echo '<a href="?page=1" class="page-link">1</a>';
+                    if ($start_page > 2) {
+                        echo '<span class="page-dots">...</span>';
+                    }
+                }
+                
+                for ($i = $start_page; $i <= $end_page; $i++) {
+                    $active = ($i == $page) ? 'active' : '';
+                    echo '<a href="?page=' . $i . '" class="page-link ' . $active . '">' . $i . '</a>';
+                }
+                
+                if ($end_page < $total_pages) {
+                    if ($end_page < $total_pages - 1) {
+                        echo '<span class="page-dots">...</span>';
+                    }
+                    echo '<a href="?page=' . $total_pages . '" class="page-link">' . $total_pages . '</a>';
+                }
+                ?>
+                
+                <!-- Next button -->
+                <?php if ($page < $total_pages): ?>
+                    <a href="?page=<?php echo $page+1; ?>" class="page-link"><i class="fas fa-chevron-right"></i></a>
+                <?php else: ?>
+                    <span class="page-link" style="opacity:0.5; cursor:not-allowed;"><i class="fas fa-chevron-right"></i></span>
+                <?php endif; ?>
             </div>
+            
+            <div class="page-info">
+                Showing page <?php echo $page; ?> of <?php echo $total_pages; ?> 
+            </div>
+            <?php endif; ?>
         </section>
 
         <!-- Why Choose Us -->
@@ -1270,19 +1114,6 @@ include("connection.php");
                     alert(`Viewing details for ${vehicleName}`);
                     // In real implementation:
                     // window.location.href = `vehicle-details.php?id=${vehicleId}`;
-                });
-            });
-            
-            // Pagination
-            const pageLinks = document.querySelectorAll('.page-link');
-            pageLinks.forEach(link => {
-                link.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    if (!this.classList.contains('active')) {
-                        pageLinks.forEach(l => l.classList.remove('active'));
-                        this.classList.add('active');
-                        // In real implementation, load vehicles for this page via AJAX
-                    }
                 });
             });
             
