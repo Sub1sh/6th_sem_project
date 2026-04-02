@@ -1,355 +1,695 @@
-<?php 
-//session_start();
+<?php
+session_start();
+include_once(__DIR__ . "/connection.php");
 
-  //  include("connection.php");
- //   include("function.php");
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: loging.php");
+    exit();
+}
 
-   // $user_data = check_login($conn);
+$user_id = $_SESSION['user_id'];
+$success = '';
+$error = '';
 
+// Fetch user data from database
+$sql = "SELECT id, name, email, phone, created_at FROM users WHERE id = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+
+if ($result->num_rows === 0) {
+    session_destroy();
+    header("Location: loging.php");
+    exit();
+}
+
+$user = $result->fetch_assoc();
+$stmt->close();
+
+// Handle profile update
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_profile'])) {
+    $name = trim($_POST['name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $phone = trim($_POST['phone'] ?? '');
+    
+    $errors = [];
+    
+    if (empty($name)) {
+        $errors[] = "Full name is required";
+    } elseif (strlen($name) < 3) {
+        $errors[] = "Full name must be at least 3 characters";
+    }
+    
+    if (empty($email)) {
+        $errors[] = "Email address is required";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = "Please enter a valid email address";
+    }
+    
+    if (empty($phone)) {
+        $errors[] = "Phone number is required";
+    } elseif (!preg_match('/^[0-9]{10,15}$/', $phone)) {
+        $errors[] = "Please enter a valid phone number (10-15 digits)";
+    }
+    
+    // Check if email is already taken by another user
+    if (empty($errors)) {
+        $check_sql = "SELECT id FROM users WHERE email = ? AND id != ?";
+        $check_stmt = $conn->prepare($check_sql);
+        $check_stmt->bind_param("si", $email, $user_id);
+        $check_stmt->execute();
+        $check_stmt->store_result();
+        
+        if ($check_stmt->num_rows > 0) {
+            $errors[] = "Email already in use by another account";
+        }
+        $check_stmt->close();
+    }
+    
+    if (empty($errors)) {
+        $update_sql = "UPDATE users SET name = ?, email = ?, phone = ? WHERE id = ?";
+        $update_stmt = $conn->prepare($update_sql);
+        $update_stmt->bind_param("sssi", $name, $email, $phone, $user_id);
+        
+        if ($update_stmt->execute()) {
+            $success = "Profile updated successfully!";
+            // Update session variables
+            $_SESSION['user_name'] = $name;
+            $_SESSION['user_email'] = $email;
+            // Refresh user data
+            $user['name'] = $name;
+            $user['email'] = $email;
+            $user['phone'] = $phone;
+        } else {
+            $error = "Failed to update profile: " . $update_stmt->error;
+        }
+        $update_stmt->close();
+    } else {
+        $error = implode("<br>", $errors);
+    }
+}
+
+// Handle password change
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['change_password'])) {
+    $current_password = $_POST['current_password'] ?? '';
+    $new_password = $_POST['new_password'] ?? '';
+    $confirm_password = $_POST['confirm_password'] ?? '';
+    
+    $errors = [];
+    
+    if (empty($current_password)) {
+        $errors[] = "Current password is required";
+    }
+    
+    if (empty($new_password)) {
+        $errors[] = "New password is required";
+    } elseif (strlen($new_password) < 6) {
+        $errors[] = "New password must be at least 6 characters";
+    }
+    
+    if ($new_password !== $confirm_password) {
+        $errors[] = "New passwords do not match";
+    }
+    
+    if (empty($errors)) {
+        // Verify current password
+        $pass_sql = "SELECT password FROM users WHERE id = ?";
+        $pass_stmt = $conn->prepare($pass_sql);
+        $pass_stmt->bind_param("i", $user_id);
+        $pass_stmt->execute();
+        $pass_result = $pass_stmt->get_result();
+        $user_data = $pass_result->fetch_assoc();
+        
+        if (password_verify($current_password, $user_data['password'])) {
+            $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+            $update_pass_sql = "UPDATE users SET password = ? WHERE id = ?";
+            $update_pass_stmt = $conn->prepare($update_pass_sql);
+            $update_pass_stmt->bind_param("si", $hashed_password, $user_id);
+            
+            if ($update_pass_stmt->execute()) {
+                $success = "Password changed successfully!";
+            } else {
+                $error = "Failed to change password";
+            }
+            $update_pass_stmt->close();
+        } else {
+            $error = "Current password is incorrect";
+        }
+        $pass_stmt->close();
+    } else {
+        $error = implode("<br>", $errors);
+    }
+}
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
-    <link rel="stylesheet" href="https://unpkg.com/swiper@7/swiper-bundle.min.css" />
+    <title>My Profile - Travel_X</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-    <!-- font awesome cdn link  -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 80px 20px 40px;
+        }
 
-    <!-- custom css file link  -->
-    <link rel="stylesheet" href="css/homepage.css">
+        /* Navigation Bar */
+        .navbar {
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            padding: 1rem 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+        }
 
-    <style type="text/css">
-        .usern{
-  font-size:25px;
-  font-family: Arial;
- /* width: 15%;
-  height: 15%;*/
-  margin-top:20px;
-  
-  left: 50%;
-  padding-left: 65px;
+        .logo h2 {
+            font-size: 1.8rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #1f6e43, #2b9b5e);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+        }
 
-  width: 45%;
-}
-.wrapper{
-  position: absolute;
-  top: 50%;
-  left: 34%;
-  height:60%;
-  margin-left:170px ;
-  border-radius: 15px;     
-  transform: translate(-50%,-50%);
-  width: 60%;
-  display: flex;
-  /*box-shadow: 20px 20px 30px  30px rgba(200, 180, 255, 0.29);*/
-  box-shadow: -15px -15px 15px  rgba(255, 255, 255, 0.2),
-  15px 15px 15px  rgba(0, 0, 0, 0.1),
-  inset -5px -15px 15px  rgba(255, 255, 255, 0.2),
-  inset 5px 5px 5px  rgba(0, 0, 0, 0.2);
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
 
+        .nav-links a {
+            text-decoration: none;
+            font-weight: 500;
+            color: #2c3e44;
+            transition: 0.2s;
+        }
 
+        .nav-links a:hover {
+            color: #1f6e43;
+        }
 
-  
-}
-.wrapper .left{
-  width: 30%;
-  background:#3A5795; 
-  padding: 30px 25px;
-  border-top-left-radius: 5px;
-  border-bottom-left-radius: 5px;
-  text-align: center;
-  color: #fff;
-  border-radius: 15px;     
-}
+        .logout-btn {
+            background: #e74c3c;
+            color: white;
+            padding: 0.5rem 1.2rem;
+            border-radius: 40px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: 0.2s;
+        }
 
-.wrapper .left img{
-  border-radius: 5px;
-  margin-bottom: 10px;
-}
-.right{
-  width: 80%;
-  left: 10%;
-  margin-top:150px;
-  margin-right:auto;
-  margin-left:240px;
-  
-  
-  padding: 0px 200px;
-  position: relative;
-  font-size: 15px;
-}
-hr{
-  border:1px solid black;
-  width: 50%;
-  
+        .logout-btn:hover {
+            background: #c0392b;
+            transform: translateY(-2px);
+        }
 
-}
-.btn1{
-  margin-left: 90px;
-  padding: 5px;
-  width: 10%;
-  background-color:#6e83b3;
-  border: none;
-  border-radius: 7px;
-  color: white;
-  
+        /* Profile Container */
+        .profile-container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
 
-}
-/*.but1,:active{
-  color: white;
-  color:#1b9bff;
-  transition: .5s;}*/
+        /* Profile Header */
+        .profile-header {
+            background: white;
+            border-radius: 24px;
+            padding: 2rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
 
-  .btn1:hover{
-    color: rgb(235, 235, 235);
-    background-color: rgb(85, 149, 179);
-  }
-.btn2{
-  margin-left: 90px;
-  padding: 5px;
-  width: 10%;
-  background-color:#6e83b3;
-  border: none;
-  color: white;
-  border-radius: 7px;
+        .avatar {
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, #1f6e43, #2b9b5e);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+        }
 
-}
-.btn3{
-  margin-left: 10px;
-  padding: 5px;
-  width: 10%;
-  background-color:#6e83b3;
-  border: none;
-  color: white;
-  border-radius: 7px;
+        .avatar i {
+            font-size: 50px;
+            color: white;
+        }
 
-}
-.btn4{
-  background-color:#6e83b3;
-  border: none;
-  color: white;
-  border-radius: 7px;
-  height: 10%;
-  padding: 5px;
+        .profile-header h2 {
+            font-size: 1.8rem;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
 
+        .profile-header .member-since {
+            color: #888;
+            font-size: 0.85rem;
+        }
 
-}
-.data{
-     width: 50%;
+        /* Profile Cards */
+        .profile-card {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
 
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
 
-}
+        .card-title i {
+            color: #1f6e43;
+        }
 
-.bu{
-  margin-top: 50px;
-  padding: 30px 355px; 
-  
-}
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.9rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-family: inherit;
+            transition: all 0.3s;
+            outline: none;
+            background: #f8fafc;
+        }
+
+        .form-group input:focus {
+            border-color: #2b9b5e;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(43, 155, 94, 0.1);
+        }
+
+        .form-group input:disabled {
+            background: #f1f5f9;
+            cursor: not-allowed;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .btn {
+            padding: 0.9rem 1.5rem;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #1f6e43, #2b9b5e);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(31, 110, 67, 0.3);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e1;
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+
+        /* Alert Messages */
+        .alert {
+            padding: 1rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert i {
+            font-size: 1.2rem;
+        }
+
+        /* Info Display */
+        .info-row {
+            display: flex;
+            padding: 1rem 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .info-label {
+            width: 120px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .info-value {
+            flex: 1;
+            color: #333;
+        }
+
+        /* Edit Mode Toggle */
+        .edit-toggle {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 1rem;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            body {
+                padding: 70px 15px 30px;
+            }
+            .form-row {
+                grid-template-columns: 1fr;
+                gap: 0;
+            }
+            .navbar {
+                flex-direction: column;
+            }
+            .nav-links {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+        }
     </style>
-
 </head>
 <body>
-    <?php 
-session_start();
 
-  include("connection.php");
-  include("function.php");
+<!-- Navigation -->
+<div class="navbar">
+    <div class="logo">
+        <h2>Travel <span style="color:#eab308;">X</span></h2>
+    </div>
+    <div class="nav-links">
+        <a href="homepage.php"><i class="fas fa-home"></i> Home</a>
+        <a href="homepage.php#vehicles"><i class="fas fa-car"></i> Vehicles</a>
+        <a href="profile.php"><i class="fas fa-user-circle"></i> My Profile</a>
+        <a href="logout.php" class="logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </div>
+</div>
 
-   $user_data = check_login($conn);
-
-?>
-
-<!--
-<header class="header">
-
-    <div id="menu-btn" class="fas fa-bars"></div>
-
-    <a href="#" class="logo"> <span>WaVe👋</span>– MoRE</a>
-
-    <div class="navbar">
-	    <nav>
-	      <ul>
-	        <li><a href="#home">home</a></li>
-			
-		    <li><a href="#about us">about us</a> 
-			    <ul>
-				    <li><a href="#">Mission</a></li>
-					<li><a href="#">Vision</a></li>
-					<li><a href="#">Our Team</a></li>
-				</ul>
-			</li>
-            <li><a href="#vehicle fleet">vehicle Fleet</a>
-			    <ul>
-                    <li><a href="#">Luxury Cars</a></li>
-					<li><a href="#">Premium Cars</a></li>
-					<li><a href="#">General Cars</a></li>
-					<li><a href="#">Buses,Vans</a></li>
-					<li><a href="#">Lorries,Trucks</a></li>
-					<li><a href="#">Three Wheelers</a></li>
-					<li><a href="#">Motor Bicycles</a></li>
-				</ul>
-            </li>
-            <li><a href="#services">services</a>
-			    <ul>
-				    <li><a href="#">Self Drive</a></li>
-					<li><a href="#">Tours / Chauffeur Driven</a></li>
-					<li><a href="#">Weddings & Events</a></li>
-					<li><a href="#">Airport / City Transfers</a></li>
-					<li><a href="#">Oil Change</a></li>
-					<li><a href="#">24/7 Support</a></li>
-				</ul>
-			</li>
-            <li><a href="#rates">rates</a>
-			    <ul>
-				    <li><a href="#">Self Drive Rates</a></li>
-					<li><a href="#">With Driver Rates</a></li>
-				</ul>
-			</li>
-		    <li><a href="#reviwes">reviews</a>
-			    <ul>
-				    <li><a href="#">Customer</a></li>
-					<li><a href="#">Driver</a></li>
-					<li><a href="#">Other</a></li>
-				</ul>
-			</li>
-            <li><a href="#contact us">contact Us</a></li>
-	    </ul>
-	 </nav>
+<div class="profile-container">
+    <!-- Profile Header -->
+    <div class="profile-header">
+        <div class="avatar">
+            <i class="fas fa-user-circle"></i>
+        </div>
+        <h2><?php echo htmlspecialchars($user['name']); ?></h2>
+        <p class="member-since">
+            <i class="fas fa-calendar-alt"></i> Member since: 
+            <?php echo date('F j, Y', strtotime($user['created_at'])); ?>
+        </p>
     </div>
 
-    <div id="login-btn">
-        <button class="btn">login</button>
-        <i class="far fa-user"></i>
+    <!-- Success/Error Messages -->
+    <?php if ($success): ?>
+    <div class="alert alert-success">
+        <i class="fas fa-check-circle"></i>
+        <div><?php echo $success; ?></div>
     </div>
-	
-	<div id="login-btn">
-        <button class="btn">Sign Up</button>
-        <i class="far fa-user"></i>
+    <?php endif; ?>
+
+    <?php if ($error): ?>
+    <div class="alert alert-error">
+        <i class="fas fa-exclamation-triangle"></i>
+        <div><?php echo $error; ?></div>
     </div>
-	
-</header> -->
+    <?php endif; ?>
 
-<header class="header">
+    <!-- Profile Information Card -->
+    <div class="profile-card">
+        <div class="card-title">
+            <i class="fas fa-user-edit"></i>
+            <span>Profile Information</span>
+        </div>
+        
+        <!-- Display Mode -->
+        <div id="displayMode">
+            <div class="info-row">
+                <div class="info-label">Full Name:</div>
+                <div class="info-value"><?php echo htmlspecialchars($user['name']); ?></div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Email Address:</div>
+                <div class="info-value"><?php echo htmlspecialchars($user['email']); ?></div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Phone Number:</div>
+                <div class="info-value"><?php echo htmlspecialchars($user['phone'] ?? 'Not provided'); ?></div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Member Since:</div>
+                <div class="info-value"><?php echo date('F j, Y', strtotime($user['created_at'])); ?></div>
+            </div>
+            <div class="edit-toggle" style="margin-top: 1.5rem;">
+                <button class="btn btn-primary" onclick="toggleEditMode(true)">
+                    <i class="fas fa-edit"></i> Edit Profile
+                </button>
+            </div>
+        </div>
 
-    <div id="menu-btn" class="fas fa-bars"></div>
-
-    <a href="#" class="logo"> <span>WaVe👋</span>– MoRE</a>
-
-    <div class="navbar">
-        <nav>
-          <ul>
-            <li><a href="homepage.php">home</a></li>
-            
-            <li><a href="about us.php">about us</a> 
-                <ul>
-                    <li><a href="#">Mission</a></li>
-                    <li><a href="#">Vision</a></li>
-                    <li><a href="#">Our Team</a></li>
-                </ul>
-            </li>
-            <li><a href="VehicleMenu.php">vehicle Fleet</a>
-               <!-- <ul>
-                    <li><a href="#">Luxury Cars</a></li>
-                    <li><a href="#">Premium Cars</a></li>
-                    <li><a href="#">General Cars</a></li>
-                    <li><a href="#">Buses,Vans</a></li>
-                    <li><a href="#">Lorries,Trucks</a></li>
-                    <li><a href="#">Three Wheelers</a></li>
-                    <li><a href="#">Motor Bicycles</a></li>
-                </ul>-->
-            </li>
-            <li><a href="#">services</a>
-                <ul>
-                    <li><a href="#">Self Drive</a></li>
-                    <li><a href="#">Tours / Chauffeur Driven</a></li>
-                    <li><a href="#">Weddings & Events</a></li>
-                    <li><a href="#">Airport / City Transfers</a></li>
-                    <li><a href="#">Oil Change</a></li>
-                    <li><a href="#">24/7 Support</a></li>
-                </ul>
-            </li>
-            <li><a href="#rates">rates</a>
-                <ul>
-                    <li><a href="#">Self Drive Rates</a></li>
-                    <li><a href="#">With Driver Rates</a></li>
-                </ul>
-            </li>
-            <li><a href="feedbackManage.php">feedback</a>
-              <!--  <ul>
-                    <li><a href="#">Customer</a></li>
-                    <li><a href="#">Driver</a></li>
-                    <li><a href="#">Other</a></li>
-                </ul>-->
-            </li>
-            <li><a href="#contact us">contact Us</a></li>
-            <li><a href="profile.php">profile</a></li>
-        </ul>
-     </nav>
+        <!-- Edit Mode -->
+        <div id="editMode" class="hidden">
+            <form method="POST" action="">
+                <div class="form-group">
+                    <label>Full Name <span style="color:#e74c3c;">*</span></label>
+                    <input type="text" name="name" value="<?php echo htmlspecialchars($user['name']); ?>" required>
+                </div>
+                <div class="form-group">
+                    <label>Email Address <span style="color:#e74c3c;">*</span></label>
+                    <input type="email" name="email" value="<?php echo htmlspecialchars($user['email']); ?>" required>
+                </div>
+                <div class="form-group">
+                    <label>Phone Number <span style="color:#e74c3c;">*</span></label>
+                    <input type="tel" name="phone" value="<?php echo htmlspecialchars($user['phone'] ?? ''); ?>" required>
+                </div>
+                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                    <button type="submit" name="update_profile" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Changes
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="toggleEditMode(false)">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 
-    <div id="login-btn">
-        <a href="loging.php">
-        <button class="btn">login</button></a>
-        <i class="far fa-user"></i>
+    <!-- Change Password Card -->
+    <div class="profile-card">
+        <div class="card-title">
+            <i class="fas fa-lock"></i>
+            <span>Change Password</span>
+        </div>
+        
+        <form method="POST" action="" id="passwordForm">
+            <div class="form-group">
+                <label>Current Password <span style="color:#e74c3c;">*</span></label>
+                <input type="password" name="current_password" id="current_password" placeholder="Enter your current password" required>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>New Password <span style="color:#e74c3c;">*</span></label>
+                    <input type="password" name="new_password" id="new_password" placeholder="Enter new password" required>
+                    <div class="password-strength" style="margin-top: 0.5rem; height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden;">
+                        <div id="strengthBar" style="height: 100%; width: 0%; transition: width 0.3s;"></div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Confirm New Password <span style="color:#e74c3c;">*</span></label>
+                    <input type="password" name="confirm_password" id="confirm_password" placeholder="Confirm new password" required>
+                    <span id="matchHint" style="font-size: 0.7rem; margin-top: 0.25rem; display: block;"></span>
+                </div>
+            </div>
+            <button type="submit" name="change_password" class="btn btn-primary">
+                <i class="fas fa-key"></i> Change Password
+            </button>
+        </form>
     </div>
-    
-    <div id="login-btn">
-        <a href="signUp.php">
-        <button class="btn">Sign Up</button></a>
-        <i class="far fa-user"></i>
+
+    <!-- Account Statistics Card -->
+    <div class="profile-card">
+        <div class="card-title">
+            <i class="fas fa-chart-line"></i>
+            <span>Account Statistics</span>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Account ID:</div>
+            <div class="info-value">#<?php echo $user['id']; ?></div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Account Status:</div>
+            <div class="info-value"><span style="color: #27ae60;"><i class="fas fa-check-circle"></i> Active</span></div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Last Login:</div>
+            <div class="info-value"><?php echo date('F j, Y g:i A'); ?></div>
+        </div>
     </div>
-    
-</header> 
- 
+</div>
 
+<script>
+    // Toggle between display and edit mode
+    function toggleEditMode(showEdit) {
+        const displayMode = document.getElementById('displayMode');
+        const editMode = document.getElementById('editMode');
+        
+        if (showEdit) {
+            displayMode.classList.add('hidden');
+            editMode.classList.remove('hidden');
+        } else {
+            displayMode.classList.remove('hidden');
+            editMode.classList.add('hidden');
+        }
+    }
 
-<!----------------------------------------------------------------->
+    // Password strength checker
+    const newPassword = document.getElementById('new_password');
+    const confirmPassword = document.getElementById('confirm_password');
+    const strengthBar = document.getElementById('strengthBar');
+    const matchHint = document.getElementById('matchHint');
 
-  <div class="usern"><b>User Profile</b></div>
-            <div class="wrapper">
-              <div class="left">
-                  <img src="image/pic-3.png"alt="user" width="200">
-                 <!-- <button class="btn4">Choise a imge </button>-->
-                   <h2><b><?php echo $user_data['user_name'];?> </b></h2>
-              </div>
-              </div>
+    function checkPasswordStrength(password) {
+        let strength = 0;
+        let width = 0;
+        let color = '#e74c3c';
+        
+        if (password.length >= 6) strength++;
+        if (password.length >= 10) strength++;
+        if (/[A-Z]/.test(password)) strength++;
+        if (/[0-9]/.test(password)) strength++;
+        if (/[^A-Za-z0-9]/.test(password)) strength++;
+        
+        if (strength <= 2) {
+            width = 33;
+            color = '#e74c3c';
+        } else if (strength <= 4) {
+            width = 66;
+            color = '#f39c12';
+        } else {
+            width = 100;
+            color = '#27ae60';
+        }
+        
+        strengthBar.style.width = width + '%';
+        strengthBar.style.backgroundColor = color;
+    }
 
+    function checkPasswordMatch() {
+        if (confirmPassword.value.length > 0) {
+            if (newPassword.value === confirmPassword.value) {
+                matchHint.innerHTML = '<i class="fas fa-check-circle" style="color:#27ae60;"></i> ✓ Passwords match!';
+                matchHint.style.color = '#27ae60';
+            } else {
+                matchHint.innerHTML = '<i class="fas fa-times-circle" style="color:#e74c3c;"></i> ✗ Passwords do not match';
+                matchHint.style.color = '#e74c3c';
+            }
+        } else {
+            matchHint.innerHTML = '';
+        }
+    }
 
+    if (newPassword) {
+        newPassword.addEventListener('input', function() {
+            if (this.value.length > 0) {
+                checkPasswordStrength(this.value);
+            } else {
+                strengthBar.style.width = '0%';
+            }
+            checkPasswordMatch();
+        });
+    }
 
-<!--information-->
-        <div class="right">
+    if (confirmPassword) {
+        confirmPassword.addEventListener('input', checkPasswordMatch);
+    }
 
-                  
-           <h3>ACCOUNT INFORATION</h3><hr/><br/>  
-                <p>Name:- <?php echo $user_data['user_name'];?> </p><br>
-                <p>Email:- <?php echo $user_data['email'];?> <!--<button class="btn1">Edit</button>--></p><br>
-                <p>Phone:-<?php echo $user_data['phone'];?><!-- <button class="btn2">Edit</button>--></p><br>
-                <p>Id:-<?php echo $user_data['id'];?></p><br>
-                <h3>LOGIN & SECURITY</h3><hr/><br>
-               <p>
-
-
-
-                
-                 <br><a href="updateProfile.php?id=<?php echo $user_data['id'];?>">
-                <button class="btn3">Update</button></a>
-                <a href="logout.php">
-                <button class="btn3">Logout</button></a>
-                <a href="deleteProfile.php?id=<?php echo $user_data['id'];?>">
-                <button class="btn3">Delete</button></a>
-
-
-
-             </p>
-         </div>
- 
-
-<script src="js/homepage.js"></script>
+    // Form validation for password change
+    document.getElementById('passwordForm')?.addEventListener('submit', function(e) {
+        if (newPassword.value !== confirmPassword.value) {
+            e.preventDefault();
+            alert('❌ New passwords do not match!');
+        } else if (newPassword.value.length > 0 && newPassword.value.length < 6) {
+            e.preventDefault();
+            alert('❌ Password must be at least 6 characters long!');
+        }
+    });
+</script>
 
 </body>
 </html>

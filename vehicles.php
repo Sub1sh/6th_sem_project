@@ -1,29 +1,109 @@
 <?php
 session_start();
-include("connection.php");
+include_once(__DIR__ . "/connection.php");
 
 // Get current page number
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 if ($page < 1) $page = 1;
 
+// Get filter parameters
+$type_filter = isset($_GET['type']) ? $_GET['type'] : '';
+$transmission_filter = isset($_GET['transmission']) ? $_GET['transmission'] : '';
+$fuel_filter = isset($_GET['fuel']) ? $_GET['fuel'] : '';
+$min_price = isset($_GET['min_price']) ? (int)$_GET['min_price'] : 0;
+$max_price = isset($_GET['max_price']) ? (int)$_GET['max_price'] : 100000;
+$search = isset($_GET['search']) ? $_GET['search'] : '';
+
 // Number of vehicles per page
-$vehicles_per_page = 8;
+$vehicles_per_page = 9;
 
 // Calculate offset
 $offset = ($page - 1) * $vehicles_per_page;
 
+// Build WHERE clause
+$where_conditions = ["status = 'available'"];
+$params = [];
+$types = "";
+
+if (!empty($type_filter)) {
+    $where_conditions[] = "type = ?";
+    $params[] = $type_filter;
+    $types .= "s";
+}
+
+if (!empty($transmission_filter)) {
+    $where_conditions[] = "transmission = ?";
+    $params[] = $transmission_filter;
+    $types .= "s";
+}
+
+if (!empty($fuel_filter)) {
+    $where_conditions[] = "fuel_type = ?";
+    $params[] = $fuel_filter;
+    $types .= "s";
+}
+
+if ($min_price > 0) {
+    $where_conditions[] = "daily_rate >= ?";
+    $params[] = $min_price;
+    $types .= "i";
+}
+
+if ($max_price < 100000) {
+    $where_conditions[] = "daily_rate <= ?";
+    $params[] = $max_price;
+    $types .= "i";
+}
+
+if (!empty($search)) {
+    $where_conditions[] = "(brand LIKE ? OR model LIKE ? OR type LIKE ?)";
+    $search_param = "%$search%";
+    $params[] = $search_param;
+    $params[] = $search_param;
+    $params[] = $search_param;
+    $types .= "sss";
+}
+
+$where_clause = implode(" AND ", $where_conditions);
+
 // Get total number of vehicles
-$total_sql = "SELECT COUNT(*) as total FROM vehicles WHERE status = 'available'";
-$total_result = mysqli_query($conn, $total_sql);
-$total_row = mysqli_fetch_assoc($total_result);
+$total_sql = "SELECT COUNT(*) as total FROM vehicles WHERE $where_clause";
+$total_stmt = $conn->prepare($total_sql);
+
+if (!empty($params)) {
+    $total_stmt->bind_param($types, ...$params);
+}
+$total_stmt->execute();
+$total_result = $total_stmt->get_result();
+$total_row = $total_result->fetch_assoc();
 $total_vehicles = $total_row['total'];
+$total_stmt->close();
 
 // Calculate total pages
 $total_pages = ceil($total_vehicles / $vehicles_per_page);
 
 // Fetch vehicles for current page
-$sql = "SELECT * FROM vehicles WHERE status = 'available' ORDER BY id LIMIT $offset, $vehicles_per_page";
-$result = mysqli_query($conn, $sql);
+$sql = "SELECT * FROM vehicles WHERE $where_clause ORDER BY id LIMIT $offset, $vehicles_per_page";
+$stmt = $conn->prepare($sql);
+
+if (!empty($params)) {
+    $stmt->bind_param($types, ...$params);
+}
+$stmt->execute();
+$result = $stmt->get_result();
+$vehicles = [];
+while ($row = $result->fetch_assoc()) {
+    $vehicles[] = $row;
+}
+$stmt->close();
+
+// Get unique vehicle types for filter
+$type_sql = "SELECT DISTINCT type FROM vehicles WHERE status = 'available' ORDER BY type";
+$type_result = $conn->query($type_sql);
+$vehicle_types = [];
+while ($row = $type_result->fetch_assoc()) {
+    $vehicle_types[] = $row['type'];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -32,249 +112,318 @@ $result = mysqli_query($conn, $sql);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vehicles - Travel_X Vehicle Rental</title>
     
-    <!-- Swiper CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/swiper@7/swiper-bundle.min.css" />
-
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <!-- Custom CSS -->
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-
-        :root {
-            --primary: #667eea;
-            --primary-dark: #764ba2;
-            --secondary: #ffd166;
-            --light: #f8f9fa;
-            --dark: #343a40;
-            --light-color: #666;
-            --box-shadow: 0 .5rem 1rem rgba(0,0,0,.1);
-            --border: .1rem solid rgba(0,0,0,.1);
         }
 
         body {
-            background: var(--light);
-            color: var(--dark);
-            line-height: 1.6;
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 80px 20px 40px;
         }
 
-        /* Main Content */
-        .main-content {
-            margin-top: 80px;
-            padding: 20px;
+        /* Navigation Bar */
+        .navbar {
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            padding: 1rem 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
         }
 
-        /* Vehicles Hero */
-        .vehicles-hero {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+        .logo h2 {
+            font-size: 1.8rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #1f6e43, #2b9b5e);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            font-weight: 500;
+            color: #2c3e44;
+            transition: 0.2s;
+        }
+
+        .nav-links a:hover, .nav-links a.active {
+            color: #1f6e43;
+        }
+
+        .logout-btn {
+            background: #e74c3c;
             color: white;
-            padding: 60px 20px;
+            padding: 0.5rem 1.2rem;
+            border-radius: 40px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .logout-btn:hover {
+            background: #c0392b;
+            transform: translateY(-2px);
+        }
+
+        /* Main Container */
+        .vehicles-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Hero Section */
+        .vehicles-hero {
+            background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.9));
+            border-radius: 24px;
+            padding: 50px 40px;
             text-align: center;
-            border-radius: 15px;
             margin-bottom: 40px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
         }
 
         .vehicles-hero h1 {
-            font-size: 3rem;
+            font-size: 2.8rem;
+            color: #1f6e43;
             margin-bottom: 15px;
         }
 
         .vehicles-hero p {
-            font-size: 1.2rem;
-            max-width: 800px;
+            font-size: 1.1rem;
+            color: #666;
+            max-width: 700px;
             margin: 0 auto;
-            opacity: 0.9;
+        }
+
+        /* Search Bar */
+        .search-section {
+            margin-bottom: 30px;
+        }
+
+        .search-box {
+            background: white;
+            border-radius: 60px;
+            padding: 5px 5px 5px 25px;
+            display: flex;
+            gap: 10px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .search-box input {
+            flex: 1;
+            border: none;
+            padding: 15px 0;
+            font-size: 1rem;
+            outline: none;
+            background: transparent;
+        }
+
+        .search-box button {
+            background: #1f6e43;
+            border: none;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .search-box button:hover {
+            background: #155a38;
+            transform: translateY(-2px);
         }
 
         /* Filter Section */
         .filter-section {
             background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: var(--box-shadow);
-            margin-bottom: 40px;
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
         }
 
-        .filter-header {
+        .filter-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-bottom: 25px;
-        }
-
-        .filter-header h2 {
-            color: var(--dark);
-            font-size: 1.8rem;
-        }
-
-        .filter-actions {
-            display: flex;
-            gap: 15px;
+            gap: 10px;
         }
 
         .filter-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 25px;
-        }
-
-        .filter-group {
-            margin-bottom: 15px;
+            gap: 15px;
+            margin-bottom: 20px;
         }
 
         .filter-group label {
             display: block;
-            margin-bottom: 8px;
+            font-size: 0.8rem;
             font-weight: 600;
-            color: var(--dark);
+            color: #555;
+            margin-bottom: 5px;
         }
 
-        .filter-group select,
+        .filter-group select, 
         .filter-group input {
             width: 100%;
-            padding: 12px 15px;
-            border: var(--border);
-            border-radius: 8px;
-            font-size: 1rem;
-            background: var(--light);
+            padding: 10px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            outline: none;
+            transition: 0.3s;
+        }
+
+        .filter-group select:focus,
+        .filter-group input:focus {
+            border-color: #1f6e43;
         }
 
         .price-range {
             display: flex;
-            align-items: center;
             gap: 10px;
+            align-items: center;
         }
 
         .price-range input {
             flex: 1;
         }
 
-        .apply-filters {
-            background: var(--primary);
-            color: white;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
+        .filter-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: flex-end;
         }
 
-        .apply-filters:hover {
-            background: var(--primary-dark);
+        .btn-filter {
+            background: #1f6e43;
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-reset {
+            background: #e2e8f0;
+            color: #333;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-filter:hover, .btn-reset:hover {
             transform: translateY(-2px);
         }
 
-        .reset-filters {
-            background: transparent;
-            color: var(--primary);
-            border: 2px solid var(--primary);
-            padding: 10px 25px;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .reset-filters:hover {
-            background: var(--primary);
+        /* Results Info */
+        .results-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
             color: white;
         }
 
+        .results-count {
+            background: rgba(0,0,0,0.2);
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-size: 0.9rem;
+        }
+
         /* Vehicles Grid */
-        .vehicles-container {
-            margin-bottom: 50px;
-        }
-
-        .section-header {
-            text-align: center;
-            margin-bottom: 40px;
-        }
-
-        .section-header h2 {
-            font-size: 2.5rem;
-            color: var(--dark);
-            margin-bottom: 15px;
-            position: relative;
-            display: inline-block;
-        }
-
-        .section-header h2::after {
-            content: '';
-            position: absolute;
-            bottom: -10px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 100px;
-            height: 4px;
-            background: linear-gradient(to right, var(--primary), var(--primary-dark));
-            border-radius: 2px;
-        }
-
-        .section-header p {
-            color: var(--light-color);
-            font-size: 1.1rem;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
         .vehicles-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
             gap: 30px;
+            margin-bottom: 50px;
         }
 
         /* Vehicle Card */
         .vehicle-card {
             background: white;
-            border-radius: 15px;
+            border-radius: 20px;
             overflow: hidden;
-            box-shadow: var(--box-shadow);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             transition: all 0.3s ease;
             position: relative;
         }
 
         .vehicle-card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+            transform: translateY(-8px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
         }
 
         .vehicle-badge {
             position: absolute;
             top: 15px;
             right: 15px;
-            background: var(--primary);
-            color: white;
             padding: 5px 15px;
             border-radius: 20px;
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             font-weight: 600;
             z-index: 2;
         }
 
-        .vehicle-badge.popular {
-            background: var(--secondary);
-            color: var(--dark);
+        .badge-new {
+            background: #4cd964;
+            color: white;
         }
 
-        .vehicle-badge.new {
-            background: #4cd964;
+        .badge-popular {
+            background: #ff9500;
+            color: white;
+        }
+
+        .badge-premium {
+            background: #af52de;
+            color: white;
         }
 
         .vehicle-image {
-            width: 100%;
-            height: 200px;
+            height: 220px;
+            background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+            display: flex;
+            align-items: center;
+            justify-content: center;
             overflow: hidden;
-            position: relative;
         }
 
         .vehicle-image img {
@@ -285,258 +434,107 @@ $result = mysqli_query($conn, $sql);
         }
 
         .vehicle-card:hover .vehicle-image img {
-            transform: scale(1.1);
+            transform: scale(1.05);
+        }
+
+        .vehicle-image i {
+            font-size: 4rem;
+            color: #1f6e43;
         }
 
         .vehicle-content {
-            padding: 25px;
+            padding: 20px;
         }
 
         .vehicle-title {
-            font-size: 1.5rem;
-            color: var(--dark);
-            margin-bottom: 10px;
+            font-size: 1.3rem;
             font-weight: 700;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .vehicle-type {
+            font-size: 0.8rem;
+            color: #1f6e43;
+            margin-bottom: 12px;
+        }
+
+        .vehicle-specs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 12px 0;
+            padding: 12px 0;
+            border-top: 1px solid #e2e8f0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .spec {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        .spec i {
+            color: #1f6e43;
+            font-size: 0.8rem;
         }
 
         .vehicle-price {
-            font-size: 1.8rem;
-            color: var(--primary);
+            font-size: 1.5rem;
             font-weight: 700;
-            margin-bottom: 15px;
+            color: #1f6e43;
+            margin: 12px 0;
         }
 
         .vehicle-price span {
-            font-size: 1rem;
-            color: var(--light-color);
-            font-weight: normal;
-        }
-
-        .vehicle-details {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        .detail-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--light-color);
-            font-size: 0.9rem;
-        }
-
-        .detail-item i {
-            color: var(--primary);
-            font-size: 1rem;
-        }
-
-        .vehicle-features {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 20px;
-        }
-
-        .feature-tag {
-            background: rgba(102, 126, 234, 0.1);
-            color: var(--primary);
-            padding: 5px 10px;
-            border-radius: 15px;
             font-size: 0.8rem;
-            font-weight: 500;
+            color: #666;
+            font-weight: normal;
         }
 
         .vehicle-actions {
             display: flex;
-            gap: 10px;
+            gap: 12px;
+            margin-top: 15px;
         }
 
         .btn-details {
             flex: 1;
-            background: var(--primary);
-            color: white;
-            border: none;
-            padding: 12px;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
+            background: #f1f5f9;
+            color: #333;
             text-decoration: none;
             text-align: center;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: 0.3s;
         }
 
         .btn-details:hover {
-            background: var(--primary-dark);
-            transform: translateY(-2px);
+            background: #e2e8f0;
         }
 
         .btn-rent {
-            flex: 2;
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            flex: 1.5;
+            background: linear-gradient(135deg, #1f6e43, #2b9b5e);
             color: white;
-            border: none;
-            padding: 12px;
-            border-radius: 8px;
+            text-decoration: none;
+            text-align: center;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 0.85rem;
             font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
+            transition: 0.3s;
+            display: inline-block;
         }
 
         .btn-rent:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        /* Categories Section */
-        .categories-section {
-            margin-bottom: 50px;
-        }
-
-        .categories-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 25px;
-        }
-
-        .category-card {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: var(--box-shadow);
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-
-        .category-card:hover {
-            transform: translateY(-5px);
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            color: white;
-        }
-
-        .category-card:hover .category-icon {
-            background: white;
-            color: var(--primary);
-        }
-
-        .category-icon {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 20px;
-            color: white;
-            font-size: 2rem;
-            transition: all 0.3s ease;
-        }
-
-        .category-card h3 {
-            font-size: 1.5rem;
-            margin-bottom: 10px;
-        }
-
-        .category-card p {
-            color: var(--light-color);
-            font-size: 0.9rem;
-        }
-
-        .category-card:hover p {
-            color: rgba(255, 255, 255, 0.9);
-        }
-
-        /* Why Choose Us */
-        .features-section {
-            background: white;
-            padding: 60px 20px;
-            border-radius: 15px;
-            margin-bottom: 50px;
-            box-shadow: var(--box-shadow);
-        }
-
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 30px;
-            margin-top: 40px;
-        }
-
-        .feature-item {
-            text-align: center;
-            padding: 30px;
-            border-radius: 10px;
-            background: var(--light);
-            transition: all 0.3s ease;
-        }
-
-        .feature-item:hover {
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
-            transform: translateY(-5px);
-        }
-
-        .feature-item i {
-            font-size: 2.5rem;
-            color: var(--primary);
-            margin-bottom: 20px;
-        }
-
-        .feature-item h3 {
-            font-size: 1.3rem;
-            margin-bottom: 15px;
-            color: var(--dark);
-        }
-
-        /* FAQ Section */
-        .faq-section {
-            margin-bottom: 50px;
-        }
-
-        .faq-container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-
-        .faq-item {
-            background: white;
-            margin-bottom: 15px;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: var(--box-shadow);
-        }
-
-        .faq-question {
-            width: 100%;
-            padding: 20px;
-            background: var(--light);
-            border: none;
-            text-align: left;
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--dark);
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .faq-answer {
-            padding: 0 20px;
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease;
-        }
-
-        .faq-answer p {
-            padding: 20px 0;
-            color: var(--light-color);
-        }
-
-        .faq-item.active .faq-answer {
-            max-height: 500px;
+            box-shadow: 0 5px 15px rgba(31, 110, 67, 0.3);
         }
 
         /* Pagination */
@@ -544,9 +542,9 @@ $result = mysqli_query($conn, $sql);
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 10px;
-            margin-top: 40px;
+            gap: 8px;
             flex-wrap: wrap;
+            margin: 40px 0;
         }
 
         .page-link {
@@ -556,590 +554,296 @@ $result = mysqli_query($conn, $sql);
             align-items: center;
             justify-content: center;
             background: white;
-            border-radius: 8px;
-            color: var(--dark);
+            border-radius: 10px;
+            color: #333;
             text-decoration: none;
             font-weight: 600;
-            box-shadow: var(--box-shadow);
-            transition: all 0.3s ease;
-            padding: 0 12px;
+            transition: 0.3s;
         }
 
         .page-link:hover,
         .page-link.active {
-            background: var(--primary);
+            background: #1f6e43;
             color: white;
         }
 
         .page-dots {
-            color: var(--light-color);
-            font-size: 1.2rem;
+            color: white;
             padding: 0 5px;
         }
 
-        .page-info {
+        /* No Results */
+        .no-results {
+            background: white;
+            border-radius: 20px;
+            padding: 60px;
             text-align: center;
-            margin-top: 20px;
-            color: var(--light-color);
-            font-size: 0.9rem;
+            grid-column: 1 / -1;
         }
 
-        /* Responsive Design */
+        .no-results i {
+            font-size: 4rem;
+            color: #cbd5e1;
+            margin-bottom: 20px;
+        }
+
+        .no-results h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .no-results p {
+            color: #666;
+        }
+
+        /* Responsive */
         @media (max-width: 768px) {
-            .main-content {
-                margin-top: 70px;
-                padding: 15px;
+            body {
+                padding: 70px 15px 30px;
             }
-
+            .navbar {
+                flex-direction: column;
+            }
             .vehicles-hero h1 {
-                font-size: 2.2rem;
+                font-size: 2rem;
             }
-
-            .filter-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .filter-header {
-                flex-direction: column;
-                gap: 15px;
-                align-items: stretch;
-            }
-
-            .filter-actions {
-                flex-direction: column;
-            }
-
             .vehicles-grid {
                 grid-template-columns: 1fr;
             }
-
+            .filter-grid {
+                grid-template-columns: 1fr;
+            }
+            .search-box {
+                flex-direction: column;
+                border-radius: 20px;
+                background: white;
+                padding: 15px;
+            }
+            .search-box button {
+                width: 100%;
+            }
             .vehicle-actions {
                 flex-direction: column;
-            }
-
-            .categories-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .pagination {
-                gap: 5px;
-            }
-
-            .page-link {
-                min-width: 35px;
-                height: 35px;
-                font-size: 0.9rem;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .vehicle-details {
-                grid-template-columns: 1fr;
-            }
-
-            .section-header h2 {
-                font-size: 2rem;
             }
         }
     </style>
 </head>
 <body>
-    <?php include("nav.php"); ?>
-    
-    <div class="main-content">
-        <!-- Hero Section -->
-        <section class="vehicles-hero">
-            <h1>Explore Our Vehicle Fleet</h1>
-            <p>Choose from a wide range of vehicles - from luxury cars to trucks and lorries. All maintained to the highest standards for your comfort and safety.</p>
-        </section>
 
-        <!-- Filter Section -->
-        <section class="filter-section">
-            <div class="filter-header">
-                <h2>Filter Vehicles</h2>
-                <div class="filter-actions">
-                    <button class="apply-filters">Apply Filters</button>
-                    <button class="reset-filters">Reset All</button>
-                </div>
+<!-- Navigation -->
+<div class="navbar">
+    <div class="logo">
+        <h2>Travel <span style="color:#eab308;">X</span></h2>
+    </div>
+    <div class="nav-links">
+        <a href="homepage.php"><i class="fas fa-home"></i> Home</a>
+        <a href="vehicles.php" class="active"><i class="fas fa-car"></i> Vehicles</a>
+        <a href="bookings.php"><i class="fas fa-bookmark"></i> My Bookings</a>
+        <a href="profile.php"><i class="fas fa-user-circle"></i> Profile</a>
+        <?php if(isset($_SESSION['user_id'])): ?>
+            <a href="logout.php" class="logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        <?php else: ?>
+            <a href="loging.php" class="logout-btn"><i class="fas fa-sign-in-alt"></i> Login</a>
+        <?php endif; ?>
+    </div>
+</div>
+
+<div class="vehicles-container">
+    <!-- Hero Section -->
+    <div class="vehicles-hero">
+        <h1><i class="fas fa-car"></i> Our Vehicle Fleet</h1>
+        <p>Choose from a wide range of well-maintained vehicles - from luxury cars to trucks and lorries. All vehicles are regularly serviced for your safety and comfort.</p>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="search-section">
+        <form method="GET" action="">
+            <div class="search-box">
+                <input type="text" name="search" placeholder="Search by brand, model or type..." value="<?php echo htmlspecialchars($search); ?>">
+                <button type="submit"><i class="fas fa-search"></i> Search</button>
             </div>
-            
+        </form>
+    </div>
+
+    <!-- Filter Section -->
+    <div class="filter-section">
+        <div class="filter-title">
+            <i class="fas fa-filter"></i> Filter Vehicles
+        </div>
+        <form method="GET" action="" id="filterForm">
+            <input type="hidden" name="search" value="<?php echo htmlspecialchars($search); ?>">
             <div class="filter-grid">
                 <div class="filter-group">
-                    <label for="vehicle-type">Vehicle Type</label>
-                    <select id="vehicle-type">
+                    <label><i class="fas fa-car"></i> Vehicle Type</label>
+                    <select name="type">
                         <option value="">All Types</option>
-                        <option value="car">Cars</option>
-                        <option value="truck">Trucks</option>
-                        <option value="lorry">Lorries</option>
-                        <option value="luxury">Luxury Vehicles</option>
-                        <option value="premium">Premium Vehicles</option>
+                        <?php foreach ($vehicle_types as $type): ?>
+                            <option value="<?php echo htmlspecialchars($type); ?>" <?php echo $type_filter == $type ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($type); ?>
+                            </option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
                 
                 <div class="filter-group">
-                    <label for="transmission">Transmission</label>
-                    <select id="transmission">
+                    <label><i class="fas fa-cogs"></i> Transmission</label>
+                    <select name="transmission">
                         <option value="">All</option>
-                        <option value="automatic">Automatic</option>
-                        <option value="manual">Manual</option>
+                        <option value="Automatic" <?php echo $transmission_filter == 'Automatic' ? 'selected' : ''; ?>>Automatic</option>
+                        <option value="Manual" <?php echo $transmission_filter == 'Manual' ? 'selected' : ''; ?>>Manual</option>
                     </select>
                 </div>
                 
                 <div class="filter-group">
-                    <label for="price-range">Price Range (per day)</label>
+                    <label><i class="fas fa-gas-pump"></i> Fuel Type</label>
+                    <select name="fuel">
+                        <option value="">All</option>
+                        <option value="Petrol" <?php echo $fuel_filter == 'Petrol' ? 'selected' : ''; ?>>Petrol</option>
+                        <option value="Diesel" <?php echo $fuel_filter == 'Diesel' ? 'selected' : ''; ?>>Diesel</option>
+                        <option value="Electric" <?php echo $fuel_filter == 'Electric' ? 'selected' : ''; ?>>Electric</option>
+                        <option value="Hybrid" <?php echo $fuel_filter == 'Hybrid' ? 'selected' : ''; ?>>Hybrid</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label><i class="fas fa-tag"></i> Price Range (per day)</label>
                     <div class="price-range">
-                        <input type="number" placeholder="Min" id="min-price">
-                        <span>to</span>
-                        <input type="number" placeholder="Max" id="max-price">
-                    </div>
-                </div>
-                
-                <div class="filter-group">
-                    <label for="fuel-type">Fuel Type</label>
-                    <select id="fuel-type">
-                        <option value="">All</option>
-                        <option value="petrol">Petrol</option>
-                        <option value="diesel">Diesel</option>
-                        <option value="electric">Electric</option>
-                        <option value="hybrid">Hybrid</option>
-                    </select>
-                </div>
-                
-                <div class="filter-group">
-                    <label for="passengers">Passengers</label>
-                    <select id="passengers">
-                        <option value="">Any</option>
-                        <option value="1-2">1-2</option>
-                        <option value="3-4">3-4</option>
-                        <option value="5-7">5-7</option>
-                        <option value="8+">8+</option>
-                    </select>
-                </div>
-            </div>
-        </section>
-
-        <!-- Vehicles Categories -->
-        <section class="categories-section">
-            <div class="section-header">
-                <h2>Vehicle Categories</h2>
-                <p>Browse vehicles by category</p>
-            </div>
-            
-            <div class="categories-grid">
-                <div class="category-card" data-category="luxury">
-                    <div class="category-icon">
-                        <i class="fas fa-gem"></i>
-                    </div>
-                    <h3>Luxury Cars</h3>
-                    <p>Premium vehicles for special occasions</p>
-                </div>
-                
-                <div class="category-card" data-category="car">
-                    <div class="category-icon">
-                        <i class="fas fa-car"></i>
-                    </div>
-                    <h3>General Cars</h3>
-                    <p>Daily use vehicles for families</p>
-                </div>
-                
-                <div class="category-card" data-category="truck">
-                    <div class="category-icon">
-                        <i class="fas fa-truck"></i>
-                    </div>
-                    <h3>Trucks</h3>
-                    <p>Heavy duty vehicles for transport</p>
-                </div>
-                
-                <div class="category-card" data-category="lorry">
-                    <div class="category-icon">
-                        <i class="fas fa-truck-loading"></i>
-                    </div>
-                    <h3>Lorries</h3>
-                    <p>Commercial vehicles for cargo</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- All Vehicles -->
-        <section class="vehicles-container">
-            <div class="section-header">
-                <h2>Available Vehicles</h2>
-                <p>Showing <?php echo min($vehicles_per_page, $total_vehicles - $offset); ?> of <?php echo $total_vehicles; ?> vehicles (Page <?php echo $page; ?> of <?php echo $total_pages; ?>)</p>
-            </div>
-            
-            <div class="vehicles-grid" id="vehiclesGrid">
-                <?php 
-                if ($result && mysqli_num_rows($result) > 0) {
-                    while ($vehicle = mysqli_fetch_assoc($result)) {
-                        $image = $vehicle['image_url'] ?? 'image/vehicle-1.png';
-                        if (!file_exists($image)) {
-                            $image = 'image/vehicle-1.png';
-                        }
-                        
-                        // Determine badge based on vehicle data
-                        $badge = '<span class="vehicle-badge">Available</span>';
-                        if ($vehicle['year'] >= 2023) {
-                            $badge = '<span class="vehicle-badge new">New</span>';
-                        } elseif ($vehicle['daily_rate'] > 20000) {
-                            $badge = '<span class="vehicle-badge popular">Premium</span>';
-                        }
-                        
-                        // Get category based on vehicle type
-                        $category = 'car';
-                        if (strpos($vehicle['type'], 'Truck') !== false) $category = 'truck';
-                        elseif (strpos($vehicle['type'], 'Lorry') !== false) $category = 'lorry';
-                        elseif (strpos($vehicle['type'], 'Luxury') !== false) $category = 'luxury';
-                ?>
-                <div class="vehicle-card" data-category="<?php echo $category; ?>" data-price="<?php echo $vehicle['daily_rate']; ?>">
-                    <?php echo $badge; ?>
-                    <div class="vehicle-image">
-                        <img src="<?php echo $image; ?>" alt="<?php echo $vehicle['brand'] . ' ' . $vehicle['model']; ?>">
-                    </div>
-                    <div class="vehicle-content">
-                        <h3 class="vehicle-title"><?php echo $vehicle['brand'] . ' ' . $vehicle['model']; ?></h3>
-                        <div class="vehicle-price">Rs <?php echo number_format($vehicle['daily_rate'], 0); ?> <span>/day</span></div>
-                        <div class="vehicle-details">
-                            <div class="detail-item">
-                                <i class="fas fa-calendar"></i>
-                                <span><?php echo $vehicle['year']; ?></span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-cog"></i>
-                                <span><?php echo $vehicle['transmission'] ?? 'Auto'; ?></span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-gas-pump"></i>
-                                <span><?php echo $vehicle['fuel_type'] ?? 'Petrol'; ?></span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="fas fa-tachometer-alt"></i>
-                                <span><?php echo $vehicle['top_speed'] ?? '120'; ?> mph</span>
-                            </div>
-                        </div>
-                        <div class="vehicle-features">
-                            <span class="feature-tag"><?php echo $vehicle['type']; ?></span>
-                            <span class="feature-tag"><?php echo $vehicle['color'] ?? 'N/A'; ?></span>
-                        </div>
-                        <div class="vehicle-actions">
-                            <a href="vehicle-details.php?id=<?php echo $vehicle['id']; ?>" class="btn-details">View Details</a>
-                            <button class="btn-rent">Rent Now</button>
-                        </div>
-                    </div>
-                </div>
-                <?php 
-                    }
-                } else {
-                    echo "<p style='text-align:center; grid-column:1/-1; padding:50px;'>No vehicles found.</p>";
-                }
-                ?>
-            </div>
-            
-            <!-- Pagination -->
-            <?php if ($total_pages > 1): ?>
-            <div class="pagination">
-                <!-- Previous button -->
-                <?php if ($page > 1): ?>
-                    <a href="?page=<?php echo $page-1; ?>" class="page-link"><i class="fas fa-chevron-left"></i></a>
-                <?php else: ?>
-                    <span class="page-link" style="opacity:0.5; cursor:not-allowed;"><i class="fas fa-chevron-left"></i></span>
-                <?php endif; ?>
-                
-                <!-- Page numbers -->
-                <?php
-                $start_page = max(1, $page - 2);
-                $end_page = min($total_pages, $page + 2);
-                
-                if ($start_page > 1) {
-                    echo '<a href="?page=1" class="page-link">1</a>';
-                    if ($start_page > 2) {
-                        echo '<span class="page-dots">...</span>';
-                    }
-                }
-                
-                for ($i = $start_page; $i <= $end_page; $i++) {
-                    $active = ($i == $page) ? 'active' : '';
-                    echo '<a href="?page=' . $i . '" class="page-link ' . $active . '">' . $i . '</a>';
-                }
-                
-                if ($end_page < $total_pages) {
-                    if ($end_page < $total_pages - 1) {
-                        echo '<span class="page-dots">...</span>';
-                    }
-                    echo '<a href="?page=' . $total_pages . '" class="page-link">' . $total_pages . '</a>';
-                }
-                ?>
-                
-                <!-- Next button -->
-                <?php if ($page < $total_pages): ?>
-                    <a href="?page=<?php echo $page+1; ?>" class="page-link"><i class="fas fa-chevron-right"></i></a>
-                <?php else: ?>
-                    <span class="page-link" style="opacity:0.5; cursor:not-allowed;"><i class="fas fa-chevron-right"></i></span>
-                <?php endif; ?>
-            </div>
-            
-            <div class="page-info">
-                Showing page <?php echo $page; ?> of <?php echo $total_pages; ?> 
-            </div>
-            <?php endif; ?>
-        </section>
-
-        <!-- Why Choose Us -->
-        <section class="features-section">
-            <div class="section-header">
-                <h2>Why Choose Travel_X?</h2>
-                <p>We provide the best vehicle rental experience in Nepal</p>
-            </div>
-            
-            <div class="features-grid">
-                <div class="feature-item">
-                    <i class="fas fa-shield-alt"></i>
-                    <h3>Fully Insured</h3>
-                    <p>All vehicles come with comprehensive insurance coverage</p>
-                </div>
-                
-                <div class="feature-item">
-                    <i class="fas fa-headset"></i>
-                    <h3>24/7 Support</h3>
-                    <p>Round-the-clock customer service and roadside assistance</p>
-                </div>
-                
-                <div class="feature-item">
-                    <i class="fas fa-car"></i>
-                    <h3>Well Maintained</h3>
-                    <p>Regular servicing and maintenance of all vehicles</p>
-                </div>
-                
-                <div class="feature-item">
-                    <i class="fas fa-tags"></i>
-                    <h3>Best Prices</h3>
-                    <p>Competitive rates with no hidden charges</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- FAQ Section -->
-        <section class="faq-section">
-            <div class="section-header">
-                <h2>Frequently Asked Questions</h2>
-                <p>Find answers to common questions about vehicle rental</p>
-            </div>
-            
-            <div class="faq-container">
-                <div class="faq-item">
-                    <button class="faq-question">
-                        What documents do I need to rent a vehicle?
-                        <i class="fas fa-chevron-down"></i>
-                    </button>
-                    <div class="faq-answer">
-                        <p>You need a valid driving license, citizenship card or passport, and a security deposit. For international tourists, an international driving permit along with passport is required.</p>
-                    </div>
-                </div>
-                
-                <div class="faq-item">
-                    <button class="faq-question">
-                        Is there a mileage limit?
-                        <i class="fas fa-chevron-down"></i>
-                    </button>
-                    <div class="faq-answer">
-                        <p>We offer flexible packages. Standard packages include 200km per day, while premium packages offer unlimited mileage. Additional kilometers are charged at Rs 50/km.</p>
-                    </div>
-                </div>
-                
-                <div class="faq-item">
-                    <button class="faq-question">
-                        Can I get a driver with the vehicle?
-                        <i class="fas fa-chevron-down"></i>
-                    </button>
-                    <div class="faq-answer">
-                        <p>Yes, we provide experienced drivers at an additional cost of Rs 1,500 per day. All our drivers are licensed and familiar with Nepal's roads.</p>
-                    </div>
-                </div>
-                
-                <div class="faq-item">
-                    <button class="faq-question">
-                        What is your fuel policy?
-                        <i class="fas fa-chevron-down"></i>
-                    </button>
-                    <div class="faq-answer">
-                        <p>Vehicles are provided with a full tank and should be returned with a full tank. If returned without a full tank, refueling charges will apply at market rates plus a service fee.</p>
+                        <input type="number" name="min_price" placeholder="Min" value="<?php echo $min_price > 0 ? $min_price : ''; ?>">
+                        <span>-</span>
+                        <input type="number" name="max_price" placeholder="Max" value="<?php echo $max_price < 100000 ? $max_price : ''; ?>">
                     </div>
                 </div>
             </div>
-        </section>
+            <div class="filter-actions">
+                <button type="submit" class="btn-filter"><i class="fas fa-check"></i> Apply Filters</button>
+                <a href="vehicles.php" class="btn-reset"><i class="fas fa-undo"></i> Reset All</a>
+            </div>
+        </form>
     </div>
-    
-    <?php include("footer.php"); ?>
-    
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Filter functionality
-            const applyFiltersBtn = document.querySelector('.apply-filters');
-            const resetFiltersBtn = document.querySelector('.reset-filters');
-            const categoryCards = document.querySelectorAll('.category-card');
-            const vehicleCards = document.querySelectorAll('.vehicle-card');
-            
-            // Category filtering
-            categoryCards.forEach(card => {
-                card.addEventListener('click', function() {
-                    const category = this.getAttribute('data-category');
-                    filterVehicles(category);
-                    
-                    // Update active category
-                    categoryCards.forEach(c => c.classList.remove('active'));
-                    this.classList.add('active');
-                });
-            });
-            
-            // Apply filters
-            applyFiltersBtn.addEventListener('click', function() {
-                const vehicleType = document.getElementById('vehicle-type').value;
-                const transmission = document.getElementById('transmission').value;
-                const minPrice = document.getElementById('min-price').value;
-                const maxPrice = document.getElementById('max-price').value;
-                const fuelType = document.getElementById('fuel-type').value;
-                const passengers = document.getElementById('passengers').value;
+
+    <!-- Results Info -->
+    <div class="results-info">
+        <div class="results-count">
+            <i class="fas fa-car"></i> <?php echo $total_vehicles; ?> vehicles found
+        </div>
+    </div>
+
+    <!-- Vehicles Grid -->
+    <div class="vehicles-grid">
+        <?php if (count($vehicles) > 0): ?>
+            <?php foreach ($vehicles as $vehicle): 
+                // Determine badge
+                $badge = '';
+                if ($vehicle['year'] >= 2023) {
+                    $badge = '<span class="vehicle-badge badge-new"><i class="fas fa-star"></i> New</span>';
+                } elseif ($vehicle['daily_rate'] > 15000) {
+                    $badge = '<span class="vehicle-badge badge-premium"><i class="fas fa-gem"></i> Premium</span>';
+                } elseif (strpos($vehicle['type'], 'SUV') !== false || strpos($vehicle['type'], 'Sports') !== false) {
+                    $badge = '<span class="vehicle-badge badge-popular"><i class="fas fa-fire"></i> Popular</span>';
+                }
                 
-                filterVehicles(vehicleType, {transmission, minPrice, maxPrice, fuelType, passengers});
-            });
-            
-            // Reset filters
-            resetFiltersBtn.addEventListener('click', function() {
-                // Reset all filter inputs
-                document.getElementById('vehicle-type').value = '';
-                document.getElementById('transmission').value = '';
-                document.getElementById('min-price').value = '';
-                document.getElementById('max-price').value = '';
-                document.getElementById('fuel-type').value = '';
-                document.getElementById('passengers').value = '';
-                
-                // Reset category cards
-                categoryCards.forEach(card => card.classList.remove('active'));
-                
-                // Show all vehicles
-                vehicleCards.forEach(card => {
-                    card.style.display = 'block';
-                });
-            });
-            
-            // Filter vehicles function
-            function filterVehicles(category, additionalFilters = {}) {
-                vehicleCards.forEach(card => {
-                    const cardCategory = card.getAttribute('data-category');
-                    const cardPrice = parseFloat(card.getAttribute('data-price'));
-                    
-                    let showCard = true;
-                    
-                    // Filter by category
-                    if (category && category !== '' && cardCategory !== category) {
-                        showCard = false;
-                    }
-                    
-                    // Filter by price range
-                    if (additionalFilters.minPrice && cardPrice < parseFloat(additionalFilters.minPrice)) {
-                        showCard = false;
-                    }
-                    
-                    if (additionalFilters.maxPrice && cardPrice > parseFloat(additionalFilters.maxPrice)) {
-                        showCard = false;
-                    }
-                    
-                    // Show or hide card
-                    card.style.display = showCard ? 'block' : 'none';
-                });
-            }
-            
-            // FAQ accordion
-            const faqQuestions = document.querySelectorAll('.faq-question');
-            faqQuestions.forEach(question => {
-                question.addEventListener('click', function() {
-                    const item = this.parentElement;
-                    const answer = this.nextElementSibling;
-                    const icon = this.querySelector('i');
-                    
-                    // Close other items
-                    document.querySelectorAll('.faq-item').forEach(otherItem => {
-                        if (otherItem !== item) {
-                            otherItem.classList.remove('active');
-                            otherItem.querySelector('.faq-answer').style.maxHeight = null;
-                            otherItem.querySelector('i').style.transform = 'rotate(0deg)';
-                        }
-                    });
-                    
-                    // Toggle current item
-                    item.classList.toggle('active');
-                    if (item.classList.contains('active')) {
-                        answer.style.maxHeight = answer.scrollHeight + 'px';
-                        icon.style.transform = 'rotate(180deg)';
-                    } else {
-                        answer.style.maxHeight = null;
-                        icon.style.transform = 'rotate(0deg)';
-                    }
-                });
-            });
-            
-            // Rent Now button functionality
-            const rentButtons = document.querySelectorAll('.btn-rent');
-            rentButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    const vehicleCard = this.closest('.vehicle-card');
-                    const vehicleName = vehicleCard.querySelector('.vehicle-title').textContent;
-                    const vehiclePrice = vehicleCard.querySelector('.vehicle-price').textContent;
-                    
-                    <?php if(isset($_SESSION['user_id'])): ?>
-                        // If logged in, redirect to booking page
-                        alert(`Renting ${vehicleName} for ${vehiclePrice}`);
-                        // In real implementation, redirect to booking page with vehicle details
-                        // window.location.href = `booking.php?vehicle=${encodeURIComponent(vehicleName)}`;
+                // Image path
+                $image = $vehicle['image_url'] ?? '';
+                if (empty($image) || !file_exists($image)) {
+                    $image = '';
+                }
+            ?>
+            <div class="vehicle-card">
+                <?php echo $badge; ?>
+                <div class="vehicle-image">
+                    <?php if ($image): ?>
+                        <img src="<?php echo htmlspecialchars($image); ?>" alt="<?php echo htmlspecialchars($vehicle['brand'] . ' ' . $vehicle['model']); ?>">
                     <?php else: ?>
-                        // If not logged in, show login modal
-                        alert('Please login to rent a vehicle');
-                        // Show login modal
-                        const loginBtn = document.getElementById('login-btn');
-                        if (loginBtn) {
-                            loginBtn.click();
-                        }
+                        <i class="fas fa-car"></i>
                     <?php endif; ?>
-                });
-            });
-            
-            // View Details button functionality
-            const detailsButtons = document.querySelectorAll('.btn-details');
-            detailsButtons.forEach(button => {
-                button.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const vehicleCard = this.closest('.vehicle-card');
-                    const vehicleName = vehicleCard.querySelector('.vehicle-title').textContent;
-                    
-                    // Show vehicle details modal or redirect to details page
-                    alert(`Viewing details for ${vehicleName}`);
-                    // In real implementation:
-                    // window.location.href = `vehicle-details.php?id=${vehicleId}`;
-                });
-            });
-            
-            // Add animation to vehicle cards on scroll
-            const observerOptions = {
-                threshold: 0.1,
-                rootMargin: '0px 0px -50px 0px'
-            };
-            
-            const observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        entry.target.style.opacity = '1';
-                        entry.target.style.transform = 'translateY(0)';
-                    }
-                });
-            }, observerOptions);
-            
-            // Set initial styles for animation
-            vehicleCards.forEach(card => {
-                card.style.opacity = '0';
-                card.style.transform = 'translateY(20px)';
-                card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
-                observer.observe(card);
-            });
+                </div>
+                <div class="vehicle-content">
+                    <h3 class="vehicle-title"><?php echo htmlspecialchars($vehicle['brand'] . ' ' . $vehicle['model']); ?></h3>
+                    <div class="vehicle-type"><?php echo htmlspecialchars($vehicle['type']); ?></div>
+                    <div class="vehicle-specs">
+                        <span class="spec"><i class="fas fa-calendar"></i> <?php echo $vehicle['year']; ?></span>
+                        <span class="spec"><i class="fas fa-cogs"></i> <?php echo $vehicle['transmission']; ?></span>
+                        <span class="spec"><i class="fas fa-gas-pump"></i> <?php echo $vehicle['fuel_type']; ?></span>
+                        <span class="spec"><i class="fas fa-tachometer-alt"></i> <?php echo $vehicle['top_speed']; ?> mph</span>
+                        <span class="spec"><i class="fas fa-palette"></i> <?php echo $vehicle['color']; ?></span>
+                    </div>
+                    <div class="vehicle-price">
+                        NPR <?php echo number_format($vehicle['daily_rate'], 0); ?> <span>/ day</span>
+                    </div>
+                    <div class="vehicle-actions">
+                        <a href="vehicle-details.php?id=<?php echo $vehicle['id']; ?>" class="btn-details">
+                            <i class="fas fa-info-circle"></i> Details
+                        </a>
+                        <a href="checkout.php?id=<?php echo $vehicle['id']; ?>" class="btn-rent">
+                            <i class="fas fa-shopping-cart"></i> Rent Now
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <div class="no-results">
+                <i class="fas fa-car-side"></i>
+                <h3>No Vehicles Found</h3>
+                <p>We couldn't find any vehicles matching your criteria. Please try different filters.</p>
+                <a href="vehicles.php" class="btn-rent" style="display: inline-block; margin-top: 20px; padding: 12px 30px;">
+                    <i class="fas fa-undo"></i> Reset Filters
+                </a>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- Pagination -->
+    <?php if ($total_pages > 1): ?>
+    <div class="pagination">
+        <?php if ($page > 1): ?>
+            <a href="?page=<?php echo $page-1; ?>&type=<?php echo urlencode($type_filter); ?>&transmission=<?php echo urlencode($transmission_filter); ?>&fuel=<?php echo urlencode($fuel_filter); ?>&min_price=<?php echo $min_price; ?>&max_price=<?php echo $max_price; ?>&search=<?php echo urlencode($search); ?>" class="page-link">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+        <?php endif; ?>
+        
+        <?php
+        $start_page = max(1, $page - 2);
+        $end_page = min($total_pages, $page + 2);
+        
+        if ($start_page > 1) {
+            echo '<a href="?page=1&type=' . urlencode($type_filter) . '&transmission=' . urlencode($transmission_filter) . '&fuel=' . urlencode($fuel_filter) . '&min_price=' . $min_price . '&max_price=' . $max_price . '&search=' . urlencode($search) . '" class="page-link">1</a>';
+            if ($start_page > 2) {
+                echo '<span class="page-dots">...</span>';
+            }
+        }
+        
+        for ($i = $start_page; $i <= $end_page; $i++) {
+            $active = ($i == $page) ? 'active' : '';
+            echo '<a href="?page=' . $i . '&type=' . urlencode($type_filter) . '&transmission=' . urlencode($transmission_filter) . '&fuel=' . urlencode($fuel_filter) . '&min_price=' . $min_price . '&max_price=' . $max_price . '&search=' . urlencode($search) . '" class="page-link ' . $active . '">' . $i . '</a>';
+        }
+        
+        if ($end_page < $total_pages) {
+            if ($end_page < $total_pages - 1) {
+                echo '<span class="page-dots">...</span>';
+            }
+            echo '<a href="?page=' . $total_pages . '&type=' . urlencode($type_filter) . '&transmission=' . urlencode($transmission_filter) . '&fuel=' . urlencode($fuel_filter) . '&min_price=' . $min_price . '&max_price=' . $max_price . '&search=' . urlencode($search) . '" class="page-link">' . $total_pages . '</a>';
+        }
+        ?>
+        
+        <?php if ($page < $total_pages): ?>
+            <a href="?page=<?php echo $page+1; ?>&type=<?php echo urlencode($type_filter); ?>&transmission=<?php echo urlencode($transmission_filter); ?>&fuel=<?php echo urlencode($fuel_filter); ?>&min_price=<?php echo $min_price; ?>&max_price=<?php echo $max_price; ?>&search=<?php echo urlencode($search); ?>" class="page-link">
+                <i class="fas fa-chevron-right"></i>
+            </a>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+</div>
+
+<script>
+    // Auto-submit filter form when select changes
+    const filterSelects = document.querySelectorAll('#filterForm select');
+    filterSelects.forEach(select => {
+        select.addEventListener('change', () => {
+            document.getElementById('filterForm').submit();
         });
-    </script>
+    });
+</script>
+
 </body>
-</html>vehicle
+</html>

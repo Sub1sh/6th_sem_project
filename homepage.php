@@ -120,7 +120,7 @@ include_once(__DIR__ . "/connection.php");
                         <span class="fas fa-circle"></span> petrol
                         <span class="fas fa-circle"></span> 211mph
                     </p>
-                    <a href="#" class="btn">check out</a>
+                    <a href="checkout.php?vehicle_id=1" class="btn">Check Out</a>
                 </div>
             </div>
 
@@ -137,7 +137,7 @@ include_once(__DIR__ . "/connection.php");
                         <span class="fas fa-circle"></span> petrol
                         <span class="fas fa-circle"></span> 211mph
                     </p>
-                    <a href="#" class="btn">check out</a>
+                    <a href="checkout.php?vehicle_id=1" class="btn">Check Out</a>
                 </div>
             </div>
 
@@ -154,7 +154,7 @@ include_once(__DIR__ . "/connection.php");
                         <span class="fas fa-circle"></span> diesel
                         <span class="fas fa-circle"></span> 55mph
                     </p>
-                    <a href="#" class="btn">check out</a>
+                    <a href="checkout.php?vehicle_id=1" class="btn">Check Out</a>
                 </div>
             </div>
 
@@ -171,7 +171,7 @@ include_once(__DIR__ . "/connection.php");
                         <span class="fas fa-circle"></span> diesel
                         <span class="fas fa-circle"></span> 51mph
                     </p>
-                    <a href="#" class="btn">check out</a>
+                    <a href="checkout.php?vehicle_id=1" class="btn">Check Out</a>
                 </div>
             </div>
 
@@ -188,7 +188,7 @@ include_once(__DIR__ . "/connection.php");
                         <span class="fas fa-circle"></span> diesel
                         <span class="fas fa-circle"></span> 53mph
                     </p>
-                    <a href="#" class="btn">check out</a>
+                   <a href="checkout.php?vehicle_id=1" class="btn">Check Out</a>
                 </div>
             </div>
 
@@ -205,7 +205,7 @@ include_once(__DIR__ . "/connection.php");
                         <span class="fas fa-circle"></span> diesel
                         <span class="fas fa-circle"></span> 65mph
                     </p>
-                    <a href="#" class="btn">check out</a>
+                    <a href="checkout.php?vehicle_id=2" class="btn">Check Out</a>
                 </div>
             </div>
         </div>
@@ -281,7 +281,7 @@ include_once(__DIR__ . "/connection.php");
                         <i class="fas fa-star-half-alt"></i>
                     </div>
                     <div class="condition">Leather Int. A/C, Ambient/ Mood lighting, Power Steering, Blue Tooth, With Driver Only</div>
-                    <a href="#" class="btn">check out</a>
+                    <a href="checkout.php?vehicle_id=3" class="btn">Check Out</a>
                 </div>
             </div>
 
@@ -297,7 +297,7 @@ include_once(__DIR__ . "/connection.php");
                         <i class="fas fa-star-half-alt"></i>
                     </div>
                     <div class="condition">Leather Int. A/C, Power Steering, CD Player, With Driver Only</div>
-                    <a href="#" class="btn">check out</a>
+                    <a href="checkout.php?vehicle_id=4" class="btn">Check Out</a>
                 </div>
             </div>
 
@@ -313,7 +313,7 @@ include_once(__DIR__ . "/connection.php");
                         <i class="fas fa-star-half-alt"></i>
                     </div>
                     <div class="condition">Leather Int. A/C, Power Steering, CD Player, With Driver Only</div>
-                    <a href="#" class="btn">check out</a>
+                    <a href="checkout.php?vehicle_id=5" class="btn">Check Out</a>
                 </div>
             </div>
         </div>

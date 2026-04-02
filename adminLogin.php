@@ -3,7 +3,6 @@ session_start();
 
 // ADMIN LOGIN LOGIC
 if (isset($_POST['Adminlogin'])) {
-
     $username = $_POST['Admin_username'];
     $password = $_POST['Admin_password'];
 
@@ -28,11 +27,10 @@ if (isset($_POST['Adminlogin'])) {
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 
-    <!-- INLINE ATTRACTIVE CSS -->
     <style>
         body {
             margin: 0;
-            font-family: Arial, Helvetica, sans-serif;
+            font-family: 'Poppins', Arial, sans-serif;
         }
 
         .admin-login-wrapper {
@@ -49,76 +47,112 @@ if (isset($_POST['Adminlogin'])) {
         }
 
         .admin-login-box {
-            width: 380px;
+            width: 400px;
             background: #ffffff;
-            padding: 35px 30px;
-            border-radius: 12px;
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+            padding: 40px 35px;
+            border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
             text-align: center;
             animation: fadeIn 0.6s ease;
+        }
+
+        .admin-icon {
+            width: 70px;
+            height: 70px;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+        }
+
+        .admin-icon i {
+            font-size: 2rem;
+            color: #eab308;
         }
 
         .admin-login-box h2 {
             color: #222;
             margin-bottom: 5px;
-            font-size: 26px;
+            font-size: 28px;
+            font-weight: 700;
         }
 
         .admin-login-box .subtitle {
             font-size: 14px;
             color: #777;
-            margin-bottom: 25px;
+            margin-bottom: 30px;
         }
 
         .admin-login-box input {
             width: 100%;
-            padding: 12px 15px;
-            margin-bottom: 15px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
+            padding: 14px 18px;
+            margin-bottom: 18px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
             font-size: 15px;
             outline: none;
             transition: 0.3s;
+            font-family: inherit;
         }
 
         .admin-login-box input:focus {
-            border-color: #f9d806;
-            box-shadow: 0 0 5px rgba(249, 216, 6, 0.6);
+            border-color: #eab308;
+            box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.1);
         }
 
         .admin-login-box button {
             width: 100%;
-            padding: 12px;
-            background: #f9d806;
+            padding: 14px;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
             border: none;
-            border-radius: 6px;
+            border-radius: 12px;
             font-size: 16px;
-            font-weight: bold;
+            font-weight: 700;
+            color: white;
             cursor: pointer;
             transition: 0.3s;
         }
 
         .admin-login-box button:hover {
-            background: #e6c600;
             transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
         }
 
         .admin-login-box .back-home {
             display: inline-block;
-            margin-top: 18px;
+            margin-top: 20px;
             font-size: 14px;
             text-decoration: none;
-            color: #444;
+            color: #666;
+            transition: 0.3s;
         }
 
         .admin-login-box .back-home:hover {
-            color: #f9d806;
+            color: #eab308;
+        }
+
+        .user-login-link {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .user-login-link a {
+            color: #1f6e43;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .user-login-link a:hover {
+            text-decoration: underline;
         }
 
         @keyframes fadeIn {
             from {
                 opacity: 0;
-                transform: translateY(15px);
+                transform: translateY(20px);
             }
             to {
                 opacity: 1;
@@ -131,19 +165,27 @@ if (isset($_POST['Adminlogin'])) {
 
 <div class="admin-login-wrapper">
     <div class="admin-login-box">
+        <div class="admin-icon">
+            <i class="fas fa-user-shield"></i>
+        </div>
         <h2>Admin Login</h2>
-        <p class="subtitle">Authorized access only</p>
+        <p class="subtitle">Enter your credentials to access dashboard</p>
 
         <form method="POST">
             <input type="text" name="Admin_username" placeholder="Admin Username" required>
             <input type="password" name="Admin_password" placeholder="Admin Password" required>
 
-            <button type="submit" name="Adminlogin">Login</button>
+            <button type="submit" name="Adminlogin">
+                <i class="fas fa-sign-in-alt"></i> Login as Admin
+            </button>
         </form>
 
-        <a href="homepage.php" class="back-home">
-            <i class="fas fa-arrow-left"></i> Back to Home
-        </a>
+
+        <div class="user-login-link">
+            <a href="loging.php">
+                <i class="fas fa-user"></i> User Login
+            </a>
+        </div>
     </div>
 </div>
 
