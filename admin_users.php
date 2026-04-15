@@ -55,7 +55,6 @@ $users = mysqli_query($conn, "SELECT * FROM users ORDER BY id DESC");
         <a href="admin_vehicles.php"><i class="fas fa-car"></i> Manage Vehicles</a>
         <a href="admin_feedback.php"><i class="fas fa-comment"></i> Manage Feedback</a>
         <a href="admin_users.php" class="active"><i class="fas fa-user"></i> Manage Users</a>
-        <a href="admin_transactions.php"><i class="fas fa-money-bill-wave"></i> Transactions</a>
         <a href="adminLogout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
     </div>
 </div>
